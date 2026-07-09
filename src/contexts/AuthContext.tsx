@@ -58,8 +58,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      await api.auth.login(email, password)
-      await refreshSession()
+      const data = await api.auth.login(email, password)
+      // Use data directly instead of re-fetching session (avoids cookie timing issues)
+      if (data?.profile) {
+        // Fetch full org settings via session endpoint (cookie is now set)
+        try {
+          const sessionData = await api.auth.session()
+          if (sessionData?.session) {
+            setProfile(sessionData.session.profile)
+            setOrganization(sessionData.session.organization)
+          } else {
+            // Fallback to login response data
+            setProfile(data.profile)
+            setOrganization(data.organization as any)
+          }
+        } catch {
+          // Fallback to login response data
+          setProfile(data.profile)
+          setOrganization(data.organization as any)
+        }
+      }
       return { ok: true }
     } catch (e: any) {
       return { ok: false, error: e.message || 'Erreur' }
@@ -68,8 +86,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = async (email: string, password: string, fullName: string, orgName: string, industry: any) => {
     try {
-      await api.auth.signup(email, password, fullName, orgName, industry)
-      await refreshSession()
+      const data = await api.auth.signup(email, password, fullName, orgName, industry)
+      if (data?.profile) {
+        setProfile(data.profile)
+        setOrganization(data.organization as any)
+        // Try to fetch full session (with settings) after a short delay
+        setTimeout(async () => {
+          try {
+            const sessionData = await api.auth.session()
+            if (sessionData?.session) {
+              setProfile(sessionData.session.profile)
+              setOrganization(sessionData.session.organization)
+            }
+          } catch {}
+        }, 100)
+      }
       return { ok: true }
     } catch (e: any) {
       return { ok: false, error: e.message || 'Erreur' }
