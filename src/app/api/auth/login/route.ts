@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { hashPassword, verifyPassword, createSession, setSessionCookie } from '@/lib/auth-server'
-import { apiSuccess, apiError, logAudit } from '@/lib/api-helpers'
+import { verifyPassword, createSession, setSessionCookie } from '@/lib/auth-server'
+import { apiSuccess, apiError, logAudit, parseJson } from '@/lib/api-helpers'
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,6 +19,9 @@ export async function POST(req: NextRequest) {
     await setSessionCookie(token)
     await logAudit(profile.organizationId, 'LOGIN', 'profiles', profile.id, profile.id, profile.email)
 
+    // Parse org settings so they're available immediately (avoid timing issues)
+    const orgSettings = parseJson(profile.organization.settings, { setup_completed: true, active_modules: [], applicable_standards: [], industry_type: 'medical_device' })
+
     return apiSuccess({
       profile: {
         id: profile.id, email: profile.email, fullName: profile.fullName, role: profile.role,
@@ -26,6 +29,7 @@ export async function POST(req: NextRequest) {
       },
       organization: {
         id: profile.organization.id, name: profile.organization.name, slug: profile.organization.slug,
+        settings: orgSettings,
       },
     })
   } catch (e: any) {

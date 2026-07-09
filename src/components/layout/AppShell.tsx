@@ -77,13 +77,26 @@ export function AppShell({ children }: { children: React.ReactNode | ((props: { 
     return <Login />
   }
 
+  // Guard: if settings not yet loaded, show loading (session fetch in progress)
+  const settings = (organization as any).settings
+  if (!settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-pulse text-muted-foreground flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 animate-spin text-emerald-600" />
+          Chargement de la configuration…
+        </div>
+      </div>
+    )
+  }
+
   // Check if setup is needed
-  const needsSetup = !organization.settings.setup_completed
+  const needsSetup = !settings.setup_completed
   if (needsSetup) {
     return <SetupWizard />
   }
 
-  const activeModules = organization.settings.active_modules || [...CORE_MODULES]
+  const activeModules = settings.active_modules || [...CORE_MODULES]
   const allowedNav = NAV.filter(n => {
     if (n.adminOnly && !hasRole('admin')) return false
     if (n.module && !activeModules.includes(n.module)) return false
@@ -91,7 +104,7 @@ export function AppShell({ children }: { children: React.ReactNode | ((props: { 
   })
 
   const initials = profile.fullName.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
-  const industryConfig = organization.settings.industry_type ? INDUSTRY_CONFIG[organization.settings.industry_type] : null
+  const industryConfig = settings.industry_type ? INDUSTRY_CONFIG[settings.industry_type as keyof typeof INDUSTRY_CONFIG] : null
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">

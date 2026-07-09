@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         id: profile.id, email: profile.email, fullName: profile.fullName, role: profile.role,
         organizationId: profile.organizationId,
       },
-      organization: { id: org.id, name: org.name, slug: org.slug },
+      organization: { id: org.id, name: org.name, slug: org.slug, settings: settings },
     }, 201)
   } catch (e: any) {
     return apiError(e.message || 'Erreur serveur', 500)
