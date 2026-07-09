@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import {
   ShieldCheck, LayoutDashboard, FileText, GitBranch, AlertTriangle, Shield, AlertOctagon,
   ArrowLeftRight, ClipboardCheck, BarChart3, GraduationCap, Package, Truck, FlaskConical,
@@ -214,6 +214,7 @@ export function AppShell({ children }: { children: React.ReactNode | ((props: { 
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SidebarContent />
         </SheetContent>
       </Sheet>
