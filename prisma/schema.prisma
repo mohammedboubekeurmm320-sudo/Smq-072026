@@ -1,4 +1,4 @@
-// QMS ISO 13485 - Prisma schema
+// QMS ISO 13485 Pro — Prisma schema (multi-tenant, record_links polymorphic, audit blockchain)
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,251 +8,738 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Organization {
-  id          String   @id @default(cuid())
-  name        String
-  address     String?
-  city        String?
-  country     String?
-  type        String   @default("manufacturer") // manufacturer, distributor, service provider...
-  contactEmail String?
-  contactPhone String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+// ============================================================================
+// Organizations & Users (multi-tenant)
+// ============================================================================
 
-  users       User[]
-  documents   Document[]
-  risks       Risk[]
-  audits      Audit[]
-  nonconformities Nonconformity[]
-  capas       CAPA[]
-  trainings   Training[]
-  suppliers   Supplier[]
-  processes   Process[]
-  standards   OrganizationStandard[]
+model Organization {
+  id                 String   @id @default(cuid())
+  name               String
+  slug               String   @unique
+  subscriptionStatus String   @default("trial") // trial/active/suspended/cancelled
+  settings           String   @default("{}") // JSONB OrgSettings
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  members            OrganizationMember[]
+  profiles           Profile[]
+  documents          Document[]
+  formTemplates      FormTemplate[]
+  formInstances      FormInstance[]
+  capas              CAPA[]
+  nonConformances    NonConformance[]
+  deviations         Deviation[]
+  changeControls     ChangeControl[]
+  audits             Audit[]
+  risks              Risk[]
+  trainings          Training[]
+  batchRecords       BatchRecord[]
+  suppliers          Supplier[]
+  auditTrails        AuditTrail[]
+  electronicSignatures ElectronicSignature[]
+  recordTypeDefinitions RecordTypeDefinition[]
+  recordLinks        RecordLink[]
+  customFieldDefinitions CustomFieldDefinition[]
+  departments        Department[]
+  documentPrerequisites DocumentPrerequisite[]
+  documentTriggers   DocumentTrigger[]
+  documentRelationships DocumentRelationship[]
+  documentCodeSequences DocumentCodeSequence[]
+  scheduledReports   ScheduledReport[]
 }
 
-model User {
+model Profile {
   id             String   @id @default(cuid())
-  organizationId String
   email          String   @unique
-  name           String
-  passwordHash   String
-  role           String   @default("VIEWER") // SUPER_ADMIN, ADMIN, QUALITY_MANAGER, ENGINEER, AUDITOR, VIEWER
-  position       String?
+  fullName       String
+  role           String   @default("operator") // admin/quality_manager/auditor/document_controller/executive/operator
   department     String?
+  jobTitle       String?
+  phone          String?
+  avatarUrl      String?
+  passwordHash   String
+  organizationId String
   active         Boolean  @default(true)
   lastLoginAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  documentsOwned    Document[]    @relation("DocumentOwner")
-  documentsReviewed Document[]    @relation("DocumentReviewer")
-  documentsApproved Document[]    @relation("DocumentApprover")
-  auditsLed         Audit[]       @relation("AuditLeadAuditor")
-  trainings         Training[]
-  risksOwned        Risk[]        @relation("RiskOwner")
-  nonconformitiesOwned Nonconformity[] @relation("NcOwner")
-  capasOwned        CAPA[]        @relation("CapaOwner")
-  processesOwned    Process[]     @relation("ProcessOwner")
-  sessions          Session[]
+  memberships    OrganizationMember[]
+  documentsOwned       Document[]       @relation("DocumentAuthor")
+  documentsApproved    Document[]       @relation("DocumentApprover")
+  formTemplatesCreated FormTemplate[]   @relation("FormTemplateCreator")
+  capasOwned           CAPA[]           @relation("CapaOwner")
+  capasAssigned        CAPA[]           @relation("CapaAssignee")
+  ncrsOwned            NonConformance[] @relation("NcrOwner")
+  ncrsAssigned         NonConformance[] @relation("NcrAssignee")
+  deviationsOwned      Deviation[]      @relation("DeviationOwner")
+  deviationsAssigned   Deviation[]      @relation("DeviationAssignee")
+  changeControlsOwned  ChangeControl[]  @relation("CcOwner")
+  changeControlsReq    ChangeControl[]  @relation("CcRequester")
+  changeControlsApp    ChangeControl[]  @relation("CcApprover")
+  auditsLead           Audit[]          @relation("AuditLeadAuditor")
+  auditsSigned         Audit[]          @relation("AuditSigner")
+  risksOwned           Risk[]           @relation("RiskOwner")
+  trainingsAssigned    Training[]       @relation("TrainingAssignee")
+  batchRecordsReleased BatchRecord[]    @relation("BatchQaReleaser")
+  signatures           ElectronicSignature[] @relation("Signatures")
+  auditTrails          AuditTrail[]
+  sessions             Session[]
 }
 
-model Standard {
-  id          String   @id @default(cuid())
-  code        String   @unique // ISO 13485, ISO 14971, ISO 9001, ISO 14001...
-  name        String
-  version     String
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  organizations OrganizationStandard[]
-}
-
-model OrganizationStandard {
-  organizationId String
-  standardId     String
-  certified      Boolean  @default(false)
-  certifiedAt    DateTime?
-  createdAt      DateTime @default(now())
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  standard       Standard     @relation(fields: [standardId], references: [id], onDelete: Cascade)
-
-  @@id([organizationId, standardId])
-}
-
-model Document {
+model OrganizationMember {
   id             String   @id @default(cuid())
   organizationId String
-  code           String   // e.g. QMS-DOC-001
-  title          String
-  version        String   @default("1.0")
-  status         String   @default("DRAFT") // DRAFT, IN_REVIEW, APPROVED, OBSOLETE
-  category       String   @default("procedure") // procedure, instruction, record, manual, form, policy
-  content        String?
-  summary        String?
-  ownerId        String?
-  reviewerId     String?
-  approverId     String?
-  effectiveDate  DateTime?
-  nextReviewDate DateTime?
+  profileId      String
+  role           String   @default("member") // owner/admin/member/viewer
+  status         String   @default("active") // active/inactive/pending
+  invitedById    String?
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner          User?        @relation("DocumentOwner", fields: [ownerId], references: [id])
-  reviewer       User?        @relation("DocumentReviewer", fields: [reviewerId], references: [id])
-  approver       User?        @relation("DocumentApprover", fields: [approverId], references: [id])
+  profile        Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, code])
-}
-
-model Risk {
-  id             String   @id @default(cuid())
-  organizationId String
-  title          String
-  description    String?
-  process        String?
-  hazard         String?
-  severity       Int      @default(5)  // 1-5
-  probability    Int      @default(5)  // 1-5
-  detectability  Int      @default(5)  // 1-5
-  rpn            Int      @default(125) // S*P*D
-  mitigation     String?
-  status         String   @default("IDENTIFIED") // IDENTIFIED, ANALYZED, MITIGATED, CLOSED
-  ownerId        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner          User?        @relation("RiskOwner", fields: [ownerId], references: [id])
-}
-
-model Audit {
-  id             String   @id @default(cuid())
-  organizationId String
-  title          String
-  type           String   @default("internal") // internal, external, supplier
-  scope          String?
-  plannedDate    DateTime?
-  conductedDate  DateTime?
-  status         String   @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED, CANCELLED
-  findings       String?
-  conclusion     String?
-  leadAuditorId  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leadAuditor    User?        @relation("AuditLeadAuditor", fields: [leadAuditorId], references: [id])
-}
-
-model Nonconformity {
-  id             String   @id @default(cuid())
-  organizationId String
-  reference      String
-  title          String
-  description    String?
-  source         String   @default("internal_audit") // internal_audit, external_audit, customer_complaint, supplier, process
-  severity       String   @default("minor") // minor, major, critical
-  status         String   @default("OPEN") // OPEN, INVESTIGATION, ACTION, CLOSED
-  ownerId        String?
-  detectedDate   DateTime @default(now())
-  closedDate     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner          User?        @relation("NcOwner", fields: [ownerId], references: [id])
-  capas          CAPA[]
-}
-
-model CAPA {
-  id                String   @id @default(cuid())
-  organizationId    String
-  reference         String
-  type              String   @default("CORRECTIVE") // CORRECTIVE, PREVENTIVE
-  title             String
-  description       String?
-  rootCause         String?
-  action            String?
-  dueDate           DateTime?
-  completedDate     DateTime?
-  status            String   @default("OPEN") // OPEN, IN_PROGRESS, COMPLETED, VERIFIED
-  ownerId           String?
-  nonconformityId   String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner             User?           @relation("CapaOwner", fields: [ownerId], references: [id])
-  nonconformity     Nonconformity?  @relation(fields: [nonconformityId], references: [id])
-}
-
-model Training {
-  id             String   @id @default(cuid())
-  organizationId String
-  userId         String
-  name           String
-  description    String?
-  category       String   @default("quality") // quality, technical, regulatory, safety
-  conductedDate  DateTime?
-  completedDate  DateTime?
-  status         String   @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED
-  score          Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Supplier {
-  id             String   @id @default(cuid())
-  organizationId String
-  name           String
-  contactName    String?
-  email          String?
-  phone          String?
-  category       String?  // raw material, service, equipment...
-  evaluation     String   @default("PENDING") // PENDING, APPROVED, CONDITIONAL, REJECTED
-  evaluationDate DateTime?
-  riskLevel      String   @default("medium") // low, medium, high
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-}
-
-model Process {
-  id             String   @id @default(cuid())
-  organizationId String
-  name           String
-  description    String?
-  type           String   @default("core") // core, support, management
-  ownerId        String?
-  inputs         String?
-  outputs        String?
-  kpi            String?
-  status         String   @default("active") // active, inactive
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner          User?        @relation("ProcessOwner", fields: [ownerId], references: [id])
+  @@unique([organizationId, profileId])
 }
 
 model Session {
   id        String   @id @default(cuid())
   token     String   @unique
-  userId    String
+  profileId String
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// Documents (§4.2.3) — 4 levels hierarchy, templates, triggers, relationships
+// ============================================================================
+
+model Department {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  labelFr        String
+  labelEn        String
+  category       String   // strategique/transversal/qc_lab/production/rd/utilities/maintenance/hse/supply_chain/commercial/finance/it/quality/regulatory/audit/other
+  parentCode     String?
+  isActive       Boolean  @default(true)
+  organizationId String?
+  createdAt      DateTime @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id                  String   @id @default(cuid())
+  documentNumber      String
+  title               String
+  docType             String   // 27 types (MANUEL/POLITIQUE/PROCEDURE/INSTRUCTION/FORMULAIRE/REGISTRE/ENREGISTREMENT/MASTER_BATCH/SOP/WI/...)
+  version             String   @default("1.0")
+  status              String   @default("Draft") // Draft/Under Review/Approved/Effective/Obsolete/Withdrawn
+  classification      String   @default("Internal") // Internal/External/Regulatory/Confidential
+  code                String?  // ex. MQ-001, PR-4.2.4
+  isoClause           String?
+  documentLevel       Int      @default(4) // 1-4
+  parentDocumentId    String?
+  departmentCode      String?
+  isPrerequisite      Boolean  @default(false)
+  reviewCycleMonths   Int      @default(12)
+  validationPhase     String?  // IQ/OQ/PQ/Full
+  effectiveDate       DateTime?
+  expirationDate      DateTime?
+  lastReviewed        DateTime?
+  nextReview          DateTime?
+  owner               String?
+  retentionPeriod     String?
+  docScope            String?
+  docReferences       String?
+  content             String?
+  summary             String?
+  isTemplate          Boolean  @default(false)
+  templateReferenceId String?
+  templateReferenceVersion String?
+  typeSpecificData    String?  // JSONB
+  customFieldsJson    String?  // JSONB
+  organizationId      String
+  authorId            String?
+  createdById         String?
+  approverId          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  author              Profile?     @relation("DocumentAuthor", fields: [authorId], references: [id])
+  approver            Profile?     @relation("DocumentApprover", fields: [approverId], references: [id])
+  signatures          ElectronicSignature[]
+  triggers            DocumentTrigger[]       @relation("TriggerSource")
+  triggeredBy         DocumentTrigger[]       @relation("TriggerTarget")
+  relationshipsParent DocumentRelationship[]  @relation("RelationshipParent")
+  relationshipsChild  DocumentRelationship[]  @relation("RelationshipChild")
+  formTemplates       FormTemplate[]
+
+  @@unique([organizationId, documentNumber])
+}
+
+model ElectronicSignature {
+  id                  String   @id @default(cuid())
+  documentId          String?
+  recordId            String?  // polymorphic (capa/ncr/audit/batch id)
+  recordType          String?  // capa/ncr/audit/batch_record/...
+  signedById          String
+  signerName          String
+  signerRole          String
+  signatureType       String   // approval/rejection/review/verification
+  signatureHash       String
+  userAgent           String?
+  revoked             Boolean  @default(false)
+  revocationReason    String?
+  organizationId      String
+  createdAt           DateTime @default(now())
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document            Document?    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signedBy            Profile      @relation("Signatures", fields: [signedById], references: [id], onDelete: Cascade)
+}
+
+model DocumentPrerequisite {
+  id              String   @id @default(cuid())
+  organizationId  String
+  recordType      String   // capa/ncr/deviation/...
+  requiredDocType String
+  requiredDocRef  String?
+  isMandatory     Boolean  @default(true)
+  description     String?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model DocumentTrigger {
+  id                String   @id @default(cuid())
+  sourceDocumentId  String
+  targetDocumentId  String
+  triggerType       String   // prerequisite/references/activates/output/escalation
+  description       String?
+  isMandatory       Boolean  @default(false)
+  organizationId    String
+  createdAt         DateTime @default(now())
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source            Document     @relation("TriggerSource", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  target            Document     @relation("TriggerTarget", fields: [targetDocumentId], references: [id], onDelete: Cascade)
+}
+
+model DocumentRelationship {
+  id                  String   @id @default(cuid())
+  parentDocumentId    String
+  childDocumentId     String
+  relationshipType    String   // parent_child/references/supersedes/obsoletes/amends
+  organizationId      String
+  createdAt           DateTime @default(now())
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent              Document     @relation("RelationshipParent", fields: [parentDocumentId], references: [id], onDelete: Cascade)
+  child               Document     @relation("RelationshipChild", fields: [childDocumentId], references: [id], onDelete: Cascade)
+}
+
+model DocumentCodeSequence {
+  id              String   @id @default(cuid())
+  prefix          String
+  departmentSuffix String?
+  lastSequence    Int      @default(0)
+  organizationId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([prefix, departmentSuffix, organizationId])
+}
+
+// ============================================================================
+// Layer 1: Form Templates (§4.2.3) — workflow approval
+// ============================================================================
+
+model FormTemplate {
+  id                  String   @id @default(cuid())
+  documentId          String?
+  title               String
+  version             String   @default("1.0")
+  description         String?
+  fieldsJson          String   @default("[]") // JSONB FormFieldDefinition[]
+  isActive            Boolean  @default(true)
+  status              String   @default("Draft") // Draft/Under_Review/Approved/Obsolete
+  moduleType          String   // slug → record_type_definitions (capa/ncr/...)
+  workflowJson        String?  // JSONB FormTemplateWorkflow
+  complianceJson      String?  // JSONB FormTemplateCompliance
+  signaturesJson      String   @default("[]") // JSONB ElectronicSignature[]
+  currentApprovalStep Int      @default(0)
+  previousVersionId   String?
+  effectiveDate       DateTime?
+  reviewComment       String?
+  organizationId      String
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document            Document?    @relation(fields: [documentId], references: [id])
+  createdBy           Profile?     @relation("FormTemplateCreator", fields: [createdById], references: [id])
+  instances           FormInstance[]
+}
+
+// ============================================================================
+// Layer 2: Form Instances (§4.2.4) — record execution
+// ============================================================================
+
+model FormInstance {
+  id                  String   @id @default(cuid())
+  templateId          String
+  templateVersion     String?
+  referenceNumber     String?
+  valuesJson          String   @default("{}") // JSONB
+  status              String   @default("Draft") // Draft/Submitted/Approved/Rejected
+  isLocked            Boolean  @default(false)
+  submittedById       String?
+  submittedAt         DateTime?
+  signatureHash       String?
+  signaturesJson      String   @default("[]") // JSONB
+  currentApprovalStep Int      @default(0)
+  approvalHistoryJson String   @default("[]") // JSONB
+  parentDocumentId    String?
+  linkedRecordId      String?
+  linkedRecordType    String?
+  recordTypeSlug      String?
+  organizationId      String
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template            FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// 10 Record-Type Modules (system record types — protected)
+// ============================================================================
+
+model CAPA {
+  id                          String   @id @default(cuid())
+  capaNumber                  String
+  title                       String
+  capaType                    String   @default("Corrective") // Corrective/Preventive
+  status                      String   @default("Open") // Open/Investigation/Implementation/Effectiveness Check/Closed
+  priority                    String   @default("Medium") // Critical/High/Medium/Low
+  source                      String   @default("Non-Conformance") // Non-Conformance/Audit Finding/Customer Complaint/Management Review/Process Monitoring/Supplier Issue
+  sourceReferenceId           String?
+  sourceRecordType            String?
+  description                 String?
+  problemStatement            String?
+  investigationDetails        String?
+  rootCauseAnalysis           String?
+  rootCauseCategory           String?  // Man/Machine/Method/Material/Measurement/Environment/Management
+  fiveWhysJson                String   @default("[]") // JSONB string[]
+  correctiveAction            String?
+  effectivenessVerificationMethod String?
+  effectivenessCriteria       String?
+  effectivenessResult         String?  // Effective/Not Effective/Pending Review
+  linkedDocumentId            String?
+  linkedNcrId                 String?
+  linkedAuditId               String?
+  linkedCapaId                String?  // parent CAPA (chain)
+  templateId                  String?
+  templateVersion             String?
+  assignedToId                String?
+  ownerId                     String?
+  dueDate                     DateTime?
+  createdDate                 DateTime @default(now())
+  closedDate                  DateTime?
+  organizationId              String
+  createdById                 String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner                       Profile?     @relation("CapaOwner", fields: [ownerId], references: [id])
+  assignee                    Profile?     @relation("CapaAssignee", fields: [assignedToId], references: [id])
+}
+
+model NonConformance {
+  id                  String   @id @default(cuid())
+  ncrNumber           String
+  title               String
+  ncrType             String   @default("Process") // Product/Process/System/Supplier/OOS/OOT
+  status              String   @default("Open") // Open/Under Investigation/Pending Disposition/Closed
+  severity            String   @default("Minor") // Critical/Major/Minor
+  source              String?
+  description         String?
+  lotNumber           String?
+  quantityAffected    String?
+  disposition         String   @default("Pending") // Use As Is/Rework/Scrap/Return to Supplier/Concession/Pending
+  isOosOot            Boolean  @default(false)
+  analyticalMethod    String?
+  measuredValue       Float?
+  measuredUnit        String?
+  specLimit           String?
+  phase1Conclusion    String?  // Assignable Cause Found/No Assignable Cause Found/Error Found/No Error Found/Pending
+  phase2Required      Boolean  @default(false)
+  phase2Conclusion    String?  // Confirmed OOS/Invalidated/Pending
+  rejectLot           Boolean  @default(false)
+  linkedCapaId        String?
+  linkedProcedureRef  String?
+  supplierId          String?
+  impactAssessment    String?
+  containmentActions  String?
+  affectedProduct     String?
+  closedSignatureHash String?
+  closedSignedAt      DateTime?
+  closedById          String?
+  closedReason        String?
+  assignedToId        String?
+  ownerId             String?
+  dueDate             DateTime?
+  createdDate         DateTime @default(now())
+  organizationId      String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner               Profile?     @relation("NcrOwner", fields: [ownerId], references: [id])
+  assignee            Profile?     @relation("NcrAssignee", fields: [assignedToId], references: [id])
+}
+
+model Deviation {
+  id                      String   @id @default(cuid())
+  devNumber               String
+  title                   String
+  deviationType           String   @default("Unplanned") // Planned/Unplanned
+  status                  String   @default("Open") // Open/Under Investigation/Pending QA Review/Approved/Closed
+  severity                String   @default("Minor") // Critical/Major/Minor
+  category                String   @default("Process") // Process/Equipment/Material/Environment/Personnel/Documentation
+  description             String?
+  deviationDetails        String?
+  justification           String?
+  riskAssessment          String?
+  correctiveAction        String?
+  preventiveAction        String?
+  sopReference            String?
+  expectedResult          String?
+  actualResult            String?
+  productStage            String?  // Raw Material/In-Process/Finished Product/Stability/Other
+  quarantine              Boolean  @default(false)
+  impactOnValidatedState  String?
+  impactOnRegulatoryFiling String?
+  containmentAction       String?
+  detectedDate            DateTime?
+  isPlannedDeviation      Boolean  @default(false)
+  lotNumber               String?
+  productCode             String?
+  quantityAffected        String?
+  linkedCapaId            String?
+  linkedDocumentId        String?
+  assignedToId            String?
+  ownerId                 String?
+  dueDate                 DateTime?
+  closedDate              DateTime?
+  organizationId          String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner                   Profile?     @relation("DeviationOwner", fields: [ownerId], references: [id])
+  assignee                Profile?     @relation("DeviationAssignee", fields: [assignedToId], references: [id])
+}
+
+model ChangeControl {
+  id                          String   @id @default(cuid())
+  ccNumber                    String
+  title                       String
+  ccType                      String   @default("Planned") // Planned/Unplanned/Emergency
+  status                      String   @default("Requested") // Requested/Under Review/Approved/In Implementation/Completed/Rejected
+  priority                    String   @default("Medium") // Critical/High/Medium/Low
+  category                    String   @default("Process") // 12 valeurs
+  description                 String?
+  justification               String?
+  proposedChange              String?
+  detailedChangeDescription   String?
+  businessComplianceJustification String?
+  riskAssessment              String?
+  impactAnalysis              String?
+  affectedAreas               String?
+  impactOnValidatedSystems    Boolean  @default(false)
+  implementationPlan          String?
+  implementationDate          DateTime?
+  estimatedCostImpact         String?
+  completionDate              DateTime?
+  regulatoryTrigger           String?
+  emergencyFlag               Boolean  @default(false)
+  linkedDocumentId            String?
+  linkedCapaId                String?
+  additionalReferences        String?
+  assignedToId                String?
+  requestedById               String?
+  approvedById                String?
+  approverId                  String?
+  ownerId                     String?
+  dueDate                     DateTime?
+  organizationId              String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner                       Profile?     @relation("CcOwner", fields: [ownerId], references: [id])
+  requester                   Profile?     @relation("CcRequester", fields: [requestedById], references: [id])
+  approver                    Profile?     @relation("CcApprover", fields: [approvedById], references: [id])
+}
+
+model Audit {
+  id                          String   @id @default(cuid())
+  auditNumber                 String
+  title                       String
+  auditType                   String   @default("Internal") // Internal/External/Supplier
+  status                      String   @default("Planned") // Planned/In Progress/Completed
+  auditScope                  String?
+  scheduledDate               DateTime?
+  completedDate               DateTime?
+  leadAuditorId               String?
+  auditeesJson                String   @default("[]") // JSONB string[]
+  findingsJson                String   @default("[]") // JSONB AuditFinding[]
+  auditCriteria               String?
+  complianceRating            String?
+  completedSignatureHash      String?
+  completedSignedAt           DateTime?
+  completedSignedById         String?
+  organizationId              String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadAuditor                 Profile?     @relation("AuditLeadAuditor", fields: [leadAuditorId], references: [id])
+  signer                      Profile?     @relation("AuditSigner", fields: [completedSignedById], references: [id])
+}
+
+model Risk {
+  id                  String   @id @default(cuid())
+  riskNumber          String
+  title               String
+  category            String   @default("Process") // Product/Process/System/Supplier
+  status              String   @default("Open") // Open/Mitigated/Accepted/Closed
+  hazardDescription   String?
+  riskOwner           String?
+  regulatoryReference String?
+  controlType         String?  // inherent_safe_design/protective_measures/information_for_safety
+  verificationMethod  String?
+  riskAcceptability   String   @default("ALARP") // acceptable/ALARP/unacceptable
+  priorityNotes       String?
+  probability         Int      @default(3) // 1-5
+  impact              Int      @default(3) // 1-5
+  detectability       Int      @default(3) // 1-5
+  rpn                 Int      @default(27) // P*I*D
+  riskLevel           String   @default("Medium") // Low/Medium/High/Critical
+  mitigation          String?
+  residualRisk        String?
+  residualProbability Int?
+  residualImpact      Int?
+  residualDetectability Int?
+  residualRpn         Int?
+  linkedDocumentId    String?
+  linkedCapaId        String?
+  ownerId             String?
+  organizationId      String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner               Profile?     @relation("RiskOwner", fields: [ownerId], references: [id])
+}
+
+model Training {
+  id                  String   @id @default(cuid())
+  title               String
+  description         String?
+  trainingType        String   @default("SOP") // Onboarding/SOP/Regulatory/Skill/Certification
+  status              String   @default("Planned") // Planned/In Progress/Completed/Overdue
+  assignedToId        String
+  dueDate             DateTime?
+  completedDate       DateTime?
+  documentId          String?
+  metadataJson        String?  // JSONB (deliveryMethod, trainer, passingScore, etc.)
+  organizationId      String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee            Profile      @relation("TrainingAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+}
+
+model BatchRecord {
+  id                  String   @id @default(cuid())
+  lotNumber           String
+  productName         String
+  productCode         String?
+  batchSize           String?
+  batchSizeUnit       String   @default("units") // vials/units/tablets/kg/liters
+  masterFormulaId     String?
+  sopReference        String?
+  manufacturingDate   DateTime?
+  expiryDate          DateTime?
+  status              String   @default("In Progress") // In Progress/Pending QA Review/Released/Rejected/Quarantine
+  isLocked            Boolean  @default(false)
+  qaReleaseDate       DateTime?
+  qaReleasedById      String?
+  stepsJson           String   @default("[]") // JSONB BatchStep[]
+  rawMaterialsJson    String   @default("[]") // JSONB RawMaterial[]
+  organizationId      String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  qaReleaser          Profile?     @relation("BatchQaReleaser", fields: [qaReleasedById], references: [id])
+}
+
+model Supplier {
+  id                      String   @id @default(cuid())
+  supplierCode            String
+  name                    String
+  category                String   @default("Raw Material") // Raw Material/Packaging/Equipment/Service/Contract Manufacturer/Laboratory/Other
+  status                  String   @default("Under Evaluation") // Qualified/Conditional/Disqualified/Under Evaluation
+  qualificationDate       DateTime?
+  nextReviewDate          DateTime?
+  certificationsJson      String   @default("[]") // JSONB string[]
+  performanceScore        Float?   // 0-100
+  qualificationDocId      String?
+  qualificationMethod     String?  // On-Site Audit/Questionnaire/Certificate Review/Third-Party Assessment/Historical Performance
+  qualificationDocRef     String?
+  website                 String?
+  primaryContactName      String?
+  primaryContactEmail     String?
+  primaryContactPhone     String?
+  street                  String?
+  city                    String?
+  stateProvince           String?
+  postalCode              String?
+  country                 String?
+  emergencyContactName    String?
+  emergencyContactPhone   String?
+  notes                   String?
+  organizationId          String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// Audit Trail (blockchain HMAC-SHA256 chain) — §4.2.4 / 21 CFR Part 11
+// ============================================================================
+
+model AuditTrail {
+  id              String   @id @default(cuid())
+  sequenceNumber  Int?
+  previousHash    String?
+  hash            String?
+  auditAction     String   // CREATE/UPDATE/DELETE/APPROVE/REJECT/SIGN/LOGIN/EXPORT
+  tableName       String
+  recordId        String
+  userId          String?
+  userEmail       String?
+  oldValuesJson   String?  // JSONB
+  newValuesJson   String?  // JSONB
+  ipAddress       String?
+  userAgent       String?
+  organizationId  String
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user            Profile?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// ============================================================================
+// Extensible Record Types (10 system + custom) + polymorphic Record Links
+// ============================================================================
+
+model RecordTypeDefinition {
+  id                  String   @id @default(cuid())
+  slug                String
+  name                String
+  nameEn              String?
+  icon                String   @default("FileText")
+  description         String?
+  statusFlowJson      String   @default("[]") // JSONB StatusFlowStep[]
+  defaultFieldsJson   String   @default("[]") // JSONB FormFieldDefinition[]
+  complianceRefsJson  String   @default("[]") // JSONB ComplianceRef[]
+  codePrefix          String?
+  isSystem            Boolean  @default(false)
+  isActive            Boolean  @default(true)
+  requiresEsig        Boolean  @default(false)
+  minApproverCount    Int      @default(1)
+  effectiveDate       DateTime?
+  previousVersionId   String?
+  version             Int      @default(1)
+  changeReason        String?
+  organizationId      String
+  createdById         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, slug])
+}
+
+model RecordLink {
+  id                String   @id @default(cuid())
+  sourceRecordId    String
+  sourceRecordType  String   // slug
+  targetRecordId    String
+  targetRecordType  String   // slug
+  linkType          String   @default("related") // related/caused_by/corrected_by/linked_to/derived_from/supersedes/references/depends_on
+  description       String?
+  organizationId    String
+  createdById       String?
+  createdAt         DateTime @default(now())
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceRecordId, sourceRecordType, targetRecordId, targetRecordType, linkType])
+}
+
+// ============================================================================
+// Custom Fields & Scheduled Reports
+// ============================================================================
+
+model CustomFieldDefinition {
+  id              String   @id @default(cuid())
+  name            String
+  label           String
+  type            String   @default("text") // text/number/date/select/checkbox/textarea/url
+  required        Boolean  @default(false)
+  optionsJson     String   @default("[]") // JSONB string[]
+  applicableTo    String   @default("*") // doc types ou ['*']
+  organizationId  String
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model ScheduledReport {
+  id              String   @id @default(cuid())
+  name            String
+  reportType      String   // management_review/capa_summary/audit_summary/compliance_overview/training_status/risk_profile
+  format          String   @default("pdf") // csv/html/pdf
+  frequency       String   @default("monthly") // daily/weekly/monthly/quarterly
+  recipientsJson  String   @default("[]") // JSONB string[]
+  filtersJson     String   @default("{}") // JSONB Record<string,string>
+  status          String   @default("active") // active/paused/completed/error
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  lastResult      String?
+  organizationId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }

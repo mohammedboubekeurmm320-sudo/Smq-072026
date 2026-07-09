@@ -1,0 +1,602 @@
+     1→// Demo Store - Zustand store for managing QMS data in memory (demo mode)
+     2→import { create } from 'zustand';
+     3→import type { Profile, Organization, Document, Capa, NonConformance, BatchRecord, Supplier, FormTemplate, FormInstance, AuditTrail, Audit, Training, Risk, DocumentPrerequisite, OrganizationMember, OrgSettings, ChangeControl, Deviation, FormTemplateStatus, UserRole, ElectronicSignature, RecordTypeDefinitionLegacy as RecordTypeDefinition, RecordLinkLegacy as RecordLink, ScheduledReport } from '@/types/qms';
+     4→import { FORM_TEMPLATE_TRANSITIONS, FORM_TEMPLATE_TRANSITION_ROLES } from '@/types/qms';
+     5→import { mockProfiles, mockOrganizations, mockOrgMembers, mockDocuments, mockCapas, mockNCRs, mockBatchRecords, mockSuppliers, mockFormTemplates, mockFormInstances, mockAudits, mockTraining, mockRisks, mockAuditTrails, mockPrerequisites, mockChangeControls, mockDeviations } from './mock-data';
+     6→
+     7→interface QMSStore {
+     8→  // Data
+     9→  profiles: Profile[];
+    10→  organizations: Organization[];
+    11→  orgMembers: OrganizationMember[];
+    12→  documents: Document[];
+    13→  capas: Capa[];
+    14→  ncrs: NonConformance[];
+    15→  batchRecords: BatchRecord[];
+    16→  suppliers: Supplier[];
+    17→  formTemplates: FormTemplate[];
+    18→  formInstances: FormInstance[];
+    19→  audits: Audit[];
+    20→  training: Training[];
+    21→  risks: Risk[];
+    22→  auditTrails: AuditTrail[];
+    23→  prerequisites: DocumentPrerequisite[];
+    24→  changeControls: ChangeControl[];
+    25→  deviations: Deviation[];
+    26→  recordTypes: RecordTypeDefinition[];
+    27→  recordLinks: RecordLink[];
+    28→  scheduledReports: ScheduledReport[];
+    29→
+    30→  // Computed helpers
+    31→  getProfile: (id: string) => Profile | undefined;
+    32→  getOrgSettings: (orgId: string) => OrgSettings | null;
+    33→  checkPrerequisites: (recordType: string, orgId: string) => { met: boolean; missing: DocumentPrerequisite[] };
+    34→
+    35→  // CRUD operations
+    36→  addDocument: (doc: Document) => void;
+    37→  updateDocument: (id: string, updates: Partial<Document>) => void;
+    38→  addCapa: (capa: Capa) => void;
+    39→  updateCapa: (id: string, updates: Partial<Capa>) => void;
+    40→  addNCR: (ncr: NonConformance) => void;
+    41→  updateNCR: (id: string, updates: Partial<NonConformance>) => void;
+    42→  addBatchRecord: (batch: BatchRecord) => void;
+    43→  updateBatchRecord: (id: string, updates: Partial<BatchRecord>) => void;
+    44→  addSupplier: (supplier: Supplier) => void;
+    45→  updateSupplier: (id: string, updates: Partial<Supplier>) => void;
+    46→  addAudit: (audit: Audit) => void;
+    47→  updateAudit: (id: string, updates: Partial<Audit>) => void;
+    48→  addTraining: (training: Training) => void;
+    49→  updateTraining: (id: string, updates: Partial<Training>) => void;
+    50→  addRisk: (risk: Risk) => void;
+    51→  updateRisk: (id: string, updates: Partial<Risk>) => void;
+    52→  addFormTemplate: (template: FormTemplate) => void;
+    53→  updateFormTemplate: (id: string, updates: Partial<FormTemplate>) => void;
+    54→  /** Transition template status with role-based guard (Layer 1) */
+    55→  transitionFormTemplateStatus: (templateId: string, targetStatus: FormTemplateStatus, userId: string, userRole: UserRole, signatureHash?: string, comment?: string) => { success: boolean; error?: string };
+    56→  /** Get only Approved templates for a given module type */
+    57→  getApprovedTemplatesForModule: (moduleType: string) => FormTemplate[];
+    58→  addFormInstance: (instance: FormInstance) => void;
+    59→  updateFormInstance: (id: string, updates: Partial<FormInstance>) => void;
+    60→  /** Transition instance status with workflow enforcement from parent template (Layer 2) */
+    61→  transitionFormInstanceStatus: (instanceId: string, targetStatus: FormInstance['status'], userId: string, userRole: UserRole, signatureHash?: string, comment?: string) => { success: boolean; error?: string };
+    62→  addChangeControl: (cc: ChangeControl) => void;
+    63→  updateChangeControl: (id: string, updates: Partial<ChangeControl>) => void;
+    64→  addDeviation: (dev: Deviation) => void;
+    65→  updateDeviation: (id: string, updates: Partial<Deviation>) => void;
+    66→
+    67→  // Profile management
+    68→  addProfile: (profile: Profile) => void;
+    69→  updateProfile: (id: string, updates: Partial<Profile>) => void;
+    70→
+    71→  // Audit trail logging
+    72→  logAudit: (action: AuditTrail['action'], tableName: string, recordId?: string, oldValues?: Record<string, unknown>, newValues?: Record<string, unknown>) => void;
+    73→
+    74→  // Organization management
+    75→  updateOrganization: (id: string, updates: Partial<Organization>) => void;
+    76→  updateOrgSettings: (orgId: string, settings: Partial<OrgSettings>) => void;
+    77→
+    78→  // Signature generation
+    79→  generateSignatureHash: (signerId: string, documentId: string, type: string) => string;
+    80→
+    81→  // Record Type Definitions (extensible custom record types)
+    82→  getRecordTypes: () => RecordTypeDefinition[];
+    83→  addRecordType: (type: Partial<RecordTypeDefinition> & { slug: string; name: string }) => RecordTypeDefinition;
+    84→  deleteRecordType: (id: string) => void;
+    85→
+    86→  // Record Links (generic cross-record linking)
+    87→  getRecordLinks: () => RecordLink[];
+    88→  addRecordLink: (link: Partial<RecordLink> & { sourceRecordId: string; targetRecordId: string; linkType: RecordLink['linkType'] }) => RecordLink;
+    89→  deleteRecordLink: (id: string) => void;
+    90→
+    91→  // Scheduled Reports
+    92→  addScheduledReport: (report: Partial<ScheduledReport> & { name: string; reportType: ScheduledReport['reportType']; format: ScheduledReport['format']; frequency: ScheduledReport['frequency']; recipients: string[]; nextRunAt: string }) => ScheduledReport;
+    93→  updateScheduledReport: (id: string, updates: Partial<ScheduledReport>) => void;
+    94→  deleteScheduledReport: (id: string) => void;
+    95→
+    96→  // API-compatible audit trail (used by API routes)
+    97→  addAuditTrail: (entry: { auditAction: string; tableName: string; recordId?: string; oldValues?: Record<string, unknown>; newValues?: Record<string, unknown> }) => void;
+    98→}
+    99→
+   100→export const useQMSStore = create<QMSStore>((set, get) => ({
+   101→  // Initial data from mock
+   102→  profiles: mockProfiles,
+   103→  organizations: mockOrganizations,
+   104→  orgMembers: mockOrgMembers,
+   105→  documents: mockDocuments,
+   106→  capas: mockCapas,
+   107→  ncrs: mockNCRs,
+   108→  batchRecords: mockBatchRecords,
+   109→  suppliers: mockSuppliers,
+   110→  formTemplates: mockFormTemplates,
+   111→  formInstances: mockFormInstances,
+   112→  audits: mockAudits,
+   113→  training: mockTraining,
+   114→  risks: mockRisks,
+   115→  auditTrails: mockAuditTrails,
+   116→  prerequisites: mockPrerequisites,
+   117→  changeControls: mockChangeControls,
+   118→  deviations: mockDeviations,
+   119→
+   120→  // Record Types — seed the 10 system modules
+   121→  recordTypes: [
+   122→    { id: 'rt-capa', slug: 'capa', name: 'CAPA', nameEn: 'CAPA', icon: 'ShieldCheck', description: 'Corrective and Preventive Actions', statusFlow: [{ linear: ['Open', 'Investigation', 'Implementation', 'Effectiveness Check', 'Closed'], eSigRequired: ['Closed'], terminal: ['Closed'] }], defaultFields: [], complianceRefs: [{ clause: '8.5.2', standard: 'ISO 13485', description: 'Corrective action' }], codePrefix: 'CAPA', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   123→    { id: 'rt-ncr', slug: 'ncr', name: 'Non-Conformité', nameEn: 'Non-Conformance', icon: 'AlertTriangle', description: 'Non-Conformance Reports', statusFlow: [{ linear: ['Open', 'Under Investigation', 'Pending Disposition', 'Closed'], eSigRequired: ['Closed'], terminal: ['Closed'] }], defaultFields: [], complianceRefs: [{ clause: '8.3', standard: 'ISO 13485', description: 'Control of nonconforming product' }], codePrefix: 'NCR', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   124→    { id: 'rt-deviation', slug: 'deviation', name: 'Déviation', nameEn: 'Deviation', icon: 'GitBranch', description: 'Deviations', statusFlow: [{ linear: ['Open', 'Under Investigation', 'Pending QA Review', 'Approved', 'Closed'], eSigRequired: ['Approved', 'Closed'], terminal: ['Closed'] }], defaultFields: [], complianceRefs: [{ clause: '7.1', standard: 'ISO 13485', description: 'Planning of product realization' }], codePrefix: 'DEV', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   125→    { id: 'rt-cc', slug: 'change_control', name: 'Maîtrise des Changements', nameEn: 'Change Control', icon: 'RefreshCw', description: 'Change Control', statusFlow: [{ linear: ['Requested', 'Under Review', 'Approved', 'In Implementation', 'Completed'], branches: { 'Rejected': ['Requested'] }, eSigRequired: ['Approved', 'Rejected', 'Completed'], terminal: ['Completed', 'Rejected'] }], defaultFields: [], complianceRefs: [{ clause: '7.3.7', standard: 'ISO 13485', description: 'Design changes' }], codePrefix: 'CC', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   126→    { id: 'rt-audit', slug: 'audit', name: 'Audit', nameEn: 'Audit', icon: 'Search', description: 'Internal/External/Supplier Audits', statusFlow: [{ linear: ['Planned', 'In Progress', 'Completed'], eSigRequired: ['Completed'], terminal: ['Completed'] }], defaultFields: [], complianceRefs: [{ clause: '8.2.4', standard: 'ISO 13485', description: 'Internal audit' }], codePrefix: 'AUD', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   127→    { id: 'rt-risk', slug: 'risk', name: 'Risque', nameEn: 'Risk Management', icon: 'TrendingUp', description: 'Risk Management', statusFlow: [{ linear: ['Open', 'Mitigated', 'Closed'], branches: { 'Accepted': ['Closed'] }, eSigRequired: ['Closed'], terminal: ['Closed'] }], defaultFields: [], complianceRefs: [{ clause: '7.1', standard: 'ISO 13485', description: 'Risk management' }], codePrefix: 'RSK', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   128→    { id: 'rt-training', slug: 'training', name: 'Formation', nameEn: 'Training', icon: 'GraduationCap', description: 'Training Records', statusFlow: [{ linear: ['Planned', 'In Progress', 'Completed'], eSigRequired: ['Completed'], terminal: ['Completed'] }], defaultFields: [], complianceRefs: [{ clause: '6.2', standard: 'ISO 13485', description: 'Competence, awareness and training' }], codePrefix: 'TRN', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   129→    { id: 'rt-supplier', slug: 'supplier', name: 'Fournisseur', nameEn: 'Supplier', icon: 'Truck', description: 'Supplier Management', statusFlow: [{ linear: ['Under Evaluation', 'Conditional', 'Qualified'], branches: { 'Disqualified': [] }, eSigRequired: ['Qualified', 'Disqualified'], terminal: ['Disqualified'] }], defaultFields: [], complianceRefs: [{ clause: '7.4', standard: 'ISO 13485', description: 'Purchasing' }], codePrefix: 'SUP', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   130→    { id: 'rt-batch', slug: 'batch_record', name: 'Enregistrement de Lot', nameEn: 'Batch Record', icon: 'Package', description: 'Batch Records', statusFlow: [{ linear: ['In Progress', 'Pending QA Review', 'Released'], branches: { 'Rejected': [], 'Quarantine': ['Pending QA Review'] }, eSigRequired: ['Released', 'Rejected'], terminal: ['Released', 'Rejected'] }], defaultFields: [], complianceRefs: [{ clause: '7.5.1', standard: 'ISO 13485', description: 'Control of production' }], codePrefix: 'BR', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   131→    { id: 'rt-oos', slug: 'oos_oot', name: 'HSP/HOT', nameEn: 'OOS/OOT', icon: 'FlaskConical', description: 'Out of Specification / Out of Trend', statusFlow: [{ linear: ['Open', 'Under Investigation', 'Pending Disposition', 'Closed'], eSigRequired: ['Closed'], terminal: ['Closed'] }], defaultFields: [], complianceRefs: [{ clause: '8.2.6', standard: 'ISO 13485', description: 'Monitoring and measurement of product' }], codePrefix: 'OOS', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   132→    { id: 'rt-general', slug: 'general', name: 'Général', nameEn: 'General', icon: 'FileText', description: 'General purpose records', statusFlow: [{ linear: ['Open', 'Under Review', 'Closed'], eSigRequired: ['Closed'], terminal: ['Closed'] }], defaultFields: [], complianceRefs: [], codePrefix: 'GEN', isSystem: true, isActive: true, requiresEsig: true, minApproverCount: 1, version: '1.0', organizationId: 'org-001', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+   133→  ],
+   134→  recordLinks: [],
+   135→  scheduledReports: [],
+   136→
+   137→  // Computed helpers
+   138→  getProfile: (id: string) => get().profiles.find(p => p.id === id),
+   139→
+   140→  getOrgSettings: (orgId: string) => {
+   141→    const org = get().organizations.find(o => o.id === orgId);
+   142→    if (!org) return null;
+   143→    try {
+   144→      return JSON.parse(org.settings) as OrgSettings;
+   145→    } catch {
+   146→      return null;
+   147→    }
+   148→  },
+   149→
+   150→  checkPrerequisites: (recordType: string, orgId: string) => {
+   151→    const state = get();
+   152→    const prereqs = state.prerequisites.filter(
+   153→      p => p.recordType === recordType && (!p.organizationId || p.organizationId === orgId)
+   154→    );
+   155→    const missing: DocumentPrerequisite[] = [];
+   156→    for (const prereq of prereqs) {
+   157→      const hasDoc = state.documents.some(
+   158→        d => d.type === prereq.requiredDocType && d.status === 'Approved' &&
+   159→        (!prereq.requiredDocRef || d.documentNumber === prereq.requiredDocRef)
+   160→      );
+   161→      if (!hasDoc) {
+   162→        missing.push(prereq);
+   163→      }
+   164→    }
+   165→    return { met: missing.length === 0, missing };
+   166→  },
+   167→
+   168→  // CRUD operations
+   169→  addDocument: (doc) => set(state => {
+   170→    state.logAudit('CREATE', 'Document', doc.id, undefined, { documentNumber: doc.documentNumber, title: doc.title, status: doc.status });
+   171→    return { documents: [...state.documents, doc] };
+   172→  }),
+   173→
+   174→  updateDocument: (id, updates) => set(state => {
+   175→    const old = state.documents.find(d => d.id === id);
+   176→    state.logAudit('UPDATE', 'Document', id, old ? { status: old.status } : undefined, updates);
+   177→    return { documents: state.documents.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d) };
+   178→  }),
+   179→
+   180→  addCapa: (capa) => set(state => {
+   181→    state.logAudit('CREATE', 'Capa', capa.id, undefined, { capaNumber: capa.capaNumber, title: capa.title, status: capa.status });
+   182→    return { capas: [...state.capas, capa] };
+   183→  }),
+   184→
+   185→  updateCapa: (id, updates) => set(state => {
+   186→    const old = state.capas.find(c => c.id === id);
+   187→    state.logAudit('UPDATE', 'Capa', id, old ? { status: old.status } : undefined, updates);
+   188→    return { capas: state.capas.map(c => c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c) };
+   189→  }),
+   190→
+   191→  addNCR: (ncr) => set(state => {
+   192→    state.logAudit('CREATE', 'NonConformance', ncr.id, undefined, { ncrNumber: ncr.ncrNumber, title: ncr.title, status: ncr.status });
+   193→    return { ncrs: [...state.ncrs, ncr] };
+   194→  }),
+   195→
+   196→  updateNCR: (id, updates) => set(state => {
+   197→    const old = state.ncrs.find(n => n.id === id);
+   198→    state.logAudit('UPDATE', 'NonConformance', id, old ? { status: old.status } : undefined, updates);
+   199→    return { ncrs: state.ncrs.map(n => n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n) };
+   200→  }),
+   201→
+   202→  addBatchRecord: (batch) => set(state => {
+   203→    state.logAudit('CREATE', 'BatchRecord', batch.id, undefined, { lotNumber: batch.lotNumber, productName: batch.productName, status: batch.status });
+   204→    return { batchRecords: [...state.batchRecords, batch] };
+   205→  }),
+   206→
+   207→  updateBatchRecord: (id, updates) => set(state => {
+   208→    const old = state.batchRecords.find(b => b.id === id);
+   209→    state.logAudit('UPDATE', 'BatchRecord', id, old ? { status: old.status } : undefined, updates);
+   210→    return { batchRecords: state.batchRecords.map(b => b.id === id ? { ...b, ...updates } : b) };
+   211→  }),
+   212→
+   213→  addSupplier: (supplier) => set(state => {
+   214→    state.logAudit('CREATE', 'Supplier', supplier.id, undefined, { supplierCode: supplier.supplierCode, name: supplier.name, status: supplier.status });
+   215→    return { suppliers: [...state.suppliers, supplier] };
+   216→  }),
+   217→
+   218→  updateSupplier: (id, updates) => set(state => {
+   219→    const old = state.suppliers.find(s => s.id === id);
+   220→    state.logAudit('UPDATE', 'Supplier', id, old ? { status: old.status } : undefined, updates);
+   221→    return { suppliers: state.suppliers.map(s => s.id === id ? { ...s, ...updates } : s) };
+   222→  }),
+   223→
+   224→  addAudit: (audit) => set(state => {
+   225→    state.logAudit('CREATE', 'Audit', audit.id, undefined, { auditNumber: audit.auditNumber, title: audit.title, status: audit.status });
+   226→    return { audits: [...state.audits, audit] };
+   227→  }),
+   228→
+   229→  updateAudit: (id, updates) => set(state => {
+   230→    const old = state.audits.find(a => a.id === id);
+   231→    state.logAudit('UPDATE', 'Audit', id, old ? { status: old.status } : undefined, updates);
+   232→    return { audits: state.audits.map(a => a.id === id ? { ...a, ...updates, updatedAt: new Date().toISOString() } : a) };
+   233→  }),
+   234→
+   235→  addTraining: (training) => set(state => {
+   236→    state.logAudit('CREATE', 'Training', training.id, undefined, { title: training.title, status: training.status });
+   237→    return { training: [...state.training, training] };
+   238→  }),
+   239→
+   240→  updateTraining: (id, updates) => set(state => {
+   241→    const old = state.training.find(t => t.id === id);
+   242→    state.logAudit('UPDATE', 'Training', id, old ? { status: old.status } : undefined, updates);
+   243→    return { training: state.training.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t) };
+   244→  }),
+   245→
+   246→  addRisk: (risk) => set(state => {
+   247→    state.logAudit('CREATE', 'Risk', risk.id, undefined, { riskNumber: risk.riskNumber, title: risk.title, riskLevel: risk.riskLevel });
+   248→    return { risks: [...state.risks, risk] };
+   249→  }),
+   250→
+   251→  updateRisk: (id, updates) => set(state => {
+   252→    const old = state.risks.find(r => r.id === id);
+   253→    state.logAudit('UPDATE', 'Risk', id, old ? { status: old.status } : undefined, updates);
+   254→    return { risks: state.risks.map(r => r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r) };
+   255→  }),
+   256→
+   257→  addFormTemplate: (template) => set(state => {
+   258→    state.logAudit('CREATE', 'FormTemplate', template.id, undefined, { title: template.title, version: template.version, status: template.status, moduleType: template.moduleType });
+   259→    return { formTemplates: [...state.formTemplates, template] };
+   260→  }),
+   261→
+   262→  updateFormTemplate: (id, updates) => set(state => {
+   263→    const old = state.formTemplates.find(t => t.id === id);
+   264→    state.logAudit('UPDATE', 'FormTemplate', id, old ? { status: old.status, version: old.version } : undefined, updates);
+   265→    return { formTemplates: state.formTemplates.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t) };
+   266→  }),
+   267→
+   268→  /** Layer 1: Transition FormTemplate status with full role-based guard and e-signature enforcement */
+   269→  transitionFormTemplateStatus: (templateId, targetStatus, userId, userRole, signatureHash, comment) => {
+   270→    const state = get();
+   271→    const template = state.formTemplates.find(t => t.id === templateId);
+   272→    if (!template) return { success: false, error: 'Template not found' };
+   273→
+   274→    // Validate transition is allowed
+   275→    const currentStatus = template.status || (template.isActive ? 'Approved' : 'Draft');
+   276→    const allowedTransitions = FORM_TEMPLATE_TRANSITIONS[currentStatus];
+   277→    if (!allowedTransitions || !allowedTransitions.includes(targetStatus)) {
+   278→      return { success: false, error: `Transition from ${template.status} to ${targetStatus} is not allowed` };
+   279→    }
+   280→
+   281→    // Validate role is authorized for this transition
+   282→    const transitionKey = `${currentStatus}→${targetStatus}`;
+   283→    const allowedRoles = FORM_TEMPLATE_TRANSITION_ROLES[transitionKey];
+   284→    if (!allowedRoles || !allowedRoles.includes(userRole)) {
+   285→      return { success: false, error: `Role '${userRole}' is not authorized for transition ${transitionKey}` };
+   286→    }
+   287→
+   288→    // For approval (Under_Review → Approved), enforce e-signature
+   289→    const requiresESig = targetStatus === 'Approved';
+   290→    if (requiresESig && !signatureHash) {
+   291→      return { success: false, error: 'Electronic signature is required for template approval' };
+   292→    }
+   293→
+   294→    // Build signature record if provided
+   295→    const newSignature: ElectronicSignature | undefined = signatureHash ? {
+   296→      id: `sig-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+   297→      documentId: templateId,
+   298→      signedById: userId,
+   299→      signerName: state.profiles.find(p => p.id === userId)?.fullName || userId,
+   300→      signerRole: userRole,
+   301→      signatureType: targetStatus === 'Approved' ? 'approval' : targetStatus === 'Obsolete' ? 'rejection' : 'review',
+   302→      signatureHash,
+   303→      revoked: false,
+   304→      createdAt: new Date().toISOString(),
+   305→    } : undefined;
+   306→
+   307→    // Compute updated fields
+   308→    const now = new Date().toISOString();
+   309→    const updates: Partial<FormTemplate> = {
+   310→      status: targetStatus,
+   311→      isActive: targetStatus === 'Approved', // isActive derived from status
+   312→      updatedAt: now,
+   313→      reviewComment: comment,
+   314→    };
+   315→    if (targetStatus === 'Approved') {
+   316→      updates.effectiveDate = now;
+   317→    }
+   318→    if (newSignature) {
+   319→      updates.signatures = [...(template.signatures || []), newSignature];
+   320→    }
+   321→
+   322→    // Apply update
+   323→    set(st => ({
+   324→      formTemplates: st.formTemplates.map(t => t.id === templateId ? { ...t, ...updates } : t),
+   325→    }));
+   326→
+   327→    // Log audit trail
+   328→    const updatedTemplate = get().formTemplates.find(t => t.id === templateId);
+   329→    get().logAudit(
+   330→      targetStatus === 'Approved' ? 'APPROVE' : targetStatus === 'Obsolete' ? 'REJECT' : 'UPDATE',
+   331→      'FormTemplate',
+   332→      templateId,
+   333→      { status: template.status },
+   334→      { status: targetStatus, approvedBy: userId, comment }
+   335→    );
+   336→
+   337→    return { success: true };
+   338→  },
+   339→
+   340→  /** Get only Approved templates for a given module type (used by 10 record modules) */
+   341→  getApprovedTemplatesForModule: (moduleType) => {
+   342→    return get().formTemplates.filter(t => t.status === 'Approved' && t.moduleType === moduleType);
+   343→  },
+   344→
+   345→  addFormInstance: (instance) => set(state => {
+   346→    state.logAudit('CREATE', 'FormInstance', instance.id, undefined, { referenceNumber: instance.referenceNumber, status: instance.status, templateId: instance.templateId });
+   347→    return { formInstances: [...state.formInstances, instance] };
+   348→  }),
+   349→
+   350→  updateFormInstance: (id, updates) => set(state => {
+   351→    const old = state.formInstances.find(f => f.id === id);
+   352→    state.logAudit('UPDATE', 'FormInstance', id, old ? { status: old.status } : undefined, updates);
+   353→    return { formInstances: state.formInstances.map(f => f.id === id ? { ...f, ...updates, updatedAt: new Date().toISOString() } : f) };
+   354→  }),
+   355→
+   356→  /** Layer 2: Transition FormInstance status with workflow enforcement from parent template */
+   357→  transitionFormInstanceStatus: (instanceId, targetStatus, userId, userRole, signatureHash, comment) => {
+   358→    const state = get();
+   359→    const instance = state.formInstances.find(f => f.id === instanceId);
+   360→    if (!instance) return { success: false, error: 'Instance not found' };
+   361→
+   362→    // Find parent template
+   363→    const template = state.formTemplates.find(t => t.id === instance.templateId);
+   364→    if (!template) return { success: false, error: 'Parent template not found' };
+   365→
+   366→    // Validate template is still Approved (cannot approve instances from Draft/Obsolete templates)
+   367→    if (template.status !== 'Approved') {
+   368→      return { success: false, error: `Cannot transition instance: parent template status is '${template.status}', must be 'Approved'` };
+   369→    }
+   370→
+   371→    // Enforce workflow configuration from template
+   372→    const wf = template.workflow;
+   373→    if (wf) {
+   374→      // Check eSignature requirement
+   375→      if (wf.eSignatureRequired && (targetStatus === 'Approved' || targetStatus === 'Rejected') && !signatureHash) {
+   376→        return { success: false, error: 'Electronic signature is required per template workflow configuration' };
+   377→      }
+   378→
+   379→      // Enforce lockAfterSubmission: once Submitted, cannot go back to Draft
+   380→      if (wf.lockAfterSubmission && instance.status === 'Submitted' && targetStatus === 'Draft') {
+   381→        return { success: false, error: 'Template configuration prohibits returning to Draft after submission' };
+   382→      }
+   383→
+   384→      // For sequential workflow: check currentApprovalStep
+   385→      if (wf.workflowType === 'sequential' && targetStatus === 'Approved') {
+   386→        const approvers = wf.approvers || [];
+   387→        const currentStep = instance.currentApprovalStep || 0;
+   388→        if (approvers.length > 0 && currentStep < approvers.length - 1) {
+   389→          // Not all sequential approvers have approved yet
+   390→          const nextStep = currentStep + 1;
+   391→          const nextApprover = approvers[nextStep];
+   392→          if (nextApprover && nextApprover.userId !== userId) {
+   393→            // Update step and continue
+   394→            set(st => ({
+   395→              formInstances: st.formInstances.map(f => f.id === instanceId ? {
+   396→                ...f,
+   397→                currentApprovalStep: nextStep,
+   398→                updatedAt: new Date().toISOString(),
+   399→                approvalHistory: [
+   400→                  ...(f.approvalHistory || []),
+   401→                  {
+   402→                    id: `ae-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+   403→                    approverId: userId,
+   404→                    approverName: state.profiles.find(p => p.id === userId)?.fullName || userId,
+   405→                    action: 'approved' as const,
+   406→                    comment,
+   407→                    signatureHash,
+   408→                    timestamp: new Date().toISOString(),
+   409→                  },
+   410→                ],
+   411→              } : f),
+   412→            }));
+   413→            get().logAudit('APPROVE', 'FormInstance', instanceId, { currentApprovalStep: instance.currentApprovalStep }, { currentApprovalStep: nextStep, approver: userId });
+   414→            return { success: true, error: `Step ${currentStep + 1}/${approvers.length} approved. Waiting for step ${nextStep + 1}/${approvers.length}.` };
+   415→          }
+   416→        }
+   417→      }
+   418→
+   419→      // For parallel workflow: all approvers must approve
+   420→      if (wf.workflowType === 'parallel' && targetStatus === 'Approved') {
+   421→        const approvers = wf.approvers || [];
+   422→        if (approvers.length > 1) {
+   423→          // Record this approver's approval
+   424→          const approvalEntry = {
+   425→            id: `ae-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+   426→            approverId: userId,
+   427→            approverName: state.profiles.find(p => p.id === userId)?.fullName || userId,
+   428→            action: 'approved' as const,
+   429→            comment,
+   430→            signatureHash,
+   431→            timestamp: new Date().toISOString(),
+   432→          };
+   433→
+   434→          const existingHistory = instance.approvalHistory || [];
+   435→          const approvedIds = [...existingHistory.filter(e => e.action === 'approved'), approvalEntry].map(e => e.approverId);
+   436→          const allApproved = approvers.every(a => approvedIds.includes(a.userId));
+   437→
+   438→          if (!allApproved) {
+   439→            // Not all approvers have approved yet
+   440→            set(st => ({
+   441→              formInstances: st.formInstances.map(f => f.id === instanceId ? {
+   442→                ...f,
+   443→                updatedAt: new Date().toISOString(),
+   444→                approvalHistory: [...(f.approvalHistory || []), approvalEntry],
+   445→              } : f),
+   446→            }));
+   447→            const approvedCount = approvedIds.length;
+   448→            get().logAudit('APPROVE', 'FormInstance', instanceId, undefined, { approver: userId, progress: `${approvedCount}/${approvers.length}` });
+   449→            return { success: true, error: `Partial approval: ${approvedCount}/${approvers.length} approvers have approved.` };
+   450→          }
+   451→        }
+   452→      }
+   453→
+   454→      // Check approval permission for instance
+   455→      const hasApprovePerm = ['admin', 'quality_manager'].includes(userRole);
+   456→      if ((targetStatus === 'Approved' || targetStatus === 'Rejected') && !hasApprovePerm) {
+   457→        return { success: false, error: `Role '${userRole}' is not authorized to approve/reject instances` };
+   458→      }
+   459→    }
+   460→
+   461→    // Build signature if provided
+   462→    const newSignature: ElectronicSignature | undefined = signatureHash ? {
+   463→      id: `sig-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+   464→      documentId: instanceId,
+   465→      signedById: userId,
+   466→      signerName: state.profiles.find(p => p.id === userId)?.fullName || userId,
+   467→      signerRole: userRole,
+   468→      signatureType: targetStatus === 'Approved' ? 'approval' : targetStatus === 'Rejected' ? 'rejection' : 'review',
+   469→      signatureHash,
+   470→      revoked: false,
+   471→      createdAt: new Date().toISOString(),
+   472→    } : undefined;
+   473→
+   474→    // Apply status transition
+   475→    const now = new Date().toISOString();
+   476→    const updates: Partial<FormInstance> = {
+   477→      status: targetStatus,
+   478→      isLocked: targetStatus === 'Approved' || (wf?.lockAfterSubmission && targetStatus === 'Submitted'),
+   479→      signatureHash: signatureHash || instance.signatureHash,
+   480→      updatedAt: now,
+   481→    };
+   482→    if (newSignature) {
+   483→      updates.signatures = [...(instance.signatures || []), newSignature];
+   484→    }
+   485→    if (targetStatus === 'Approved' || targetStatus === 'Rejected') {
+   486→      updates.approvalHistory = [
+   487→        ...(instance.approvalHistory || []),
+   488→        {
+   489→          id: `ae-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+   490→          approverId: userId,
+   491→          approverName: state.profiles.find(p => p.id === userId)?.fullName || userId,
+   492→          action: targetStatus === 'Approved' ? 'approved' as const : 'rejected' as const,
+   493→          comment,
+   494→          signatureHash,
+   495→          timestamp: now,
+   496→        },
+   497→      ];
+   498→    }
+   499→
+   500→    set(st => ({
+   501→      formInstances: st.formInstances.map(f => f.id === instanceId ? { ...f, ...updates } : f),
+   502→    }));
+   503→
+   504→    get().logAudit(
+   505→      targetStatus === 'Approved' ? 'APPROVE' : targetStatus === 'Rejected' ? 'REJECT' : 'UPDATE',
+   506→      'FormInstance',
+   507→      instanceId,
+   508→      { status: instance.status },
+   509→      { status: targetStatus, by: userId }
+   510→    );
+   511→
+   512→    return { success: true };
+   513→  },
+   514→
+   515→  addChangeControl: (cc) => set(state => {
+   516→    state.logAudit('CREATE', 'ChangeControl', cc.id, undefined, { ccNumber: cc.ccNumber, title: cc.title, status: cc.status });
+   517→    return { changeControls: [...state.changeControls, cc] };
+   518→  }),
+   519→
+   520→  updateChangeControl: (id, updates) => set(state => {
+   521→    const old = state.changeControls.find(c => c.id === id);
+   522→    state.logAudit('UPDATE', 'ChangeControl', id, old ? { status: old.status } : undefined, updates);
+   523→    return { changeControls: state.changeControls.map(c => c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c) };
+   524→  }),
+   525→
+   526→  addDeviation: (dev) => set(state => {
+   527→    state.logAudit('CREATE', 'Deviation', dev.id, undefined, { devNumber: dev.devNumber, title: dev.title, status: dev.status });
+   528→    return { deviations: [...state.deviations, dev] };
+   529→  }),
+   530→
+   531→  updateDeviation: (id, updates) => set(state => {
+   532→    const old = state.deviations.find(d => d.id === id);
+   533→    state.logAudit('UPDATE', 'Deviation', id, old ? { status: old.status } : undefined, updates);
+   534→    return { deviations: state.deviations.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d) };
+   535→  }),
+   536→
+   537→  // Profile management
+   538→  addProfile: (profile) => set(state => {
+   539→    state.logAudit('CREATE', 'Profile', profile.id, undefined, { email: profile.email, fullName: profile.fullName, role: profile.role });
+   540→    return { profiles: [...state.profiles, profile] };
+   541→  }),
+   542→
+   543→  updateProfile: (id, updates) => set(state => {
+   544→    const old = state.profiles.find(p => p.id === id);
+   545→    state.logAudit('UPDATE', 'Profile', id, old ? { role: old.role, department: old.department } : undefined, updates);
+   546→    return { profiles: state.profiles.map(p => p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p) };
+   547→  }),
+   548→
+   549→  // Audit trail logging
+   550→  logAudit: (action, tableName, recordId, oldValues, newValues) => {
+   551→    const entry: AuditTrail = {
+   552→      id: `at-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+   553→      action,
+   554→      tableName,
+   555→      recordId,
+   556→      userId: 'user-001',
+   557→      userEmail: '',
+   558→      oldValues,
+   559→      newValues,
+   560→      organizationId: 'org-001',
+   561→      createdAt: new Date().toISOString(),
+   562→    };
+   563→    set(state => ({ auditTrails: [entry, ...state.auditTrails] }));
+   564→  },
+   565→
+   566→  // Organization management
+   567→  updateOrganization: (id, updates) => set(state => ({
+   568→    organizations: state.organizations.map(o => o.id === id ? { ...o, ...updates, updatedAt: new Date().toISOString() } : o),
+   569→  })),
+   570→
+   571→  updateOrgSettings: (orgId, settingsUpdates) => set(state => {
+   572→    const org = state.organizations.find(o => o.id === orgId);
+   573→    if (!org) return state;
+   574→    const currentSettings = JSON.parse(org.settings) as OrgSettings;
+   575→    const newSettings = { ...currentSettings, ...settingsUpdates };
+   576→    return {
+   577→      organizations: state.organizations.map(o =>
+   578→        o.id === orgId ? { ...o, settings: JSON.stringify(newSettings), updatedAt: new Date().toISOString() } : o
+   579→      ),
+   580→    };
+   581→  }),
+   582→
+   583→  // Signature generation
+   584→  generateSignatureHash: (signerId, documentId, type) => {
+   585→    const timestamp = Date.now();
+   586→    const data = `${signerId}:${documentId}:${type}:${timestamp}`;
+   587→    // Simple hash for demo purposes
+   588→    let hash = 0;
+   589→    for (let i = 0; i < data.length; i++) {
+   590→      const char = data.charCodeAt(i);
+   591→      hash = ((hash << 5) - hash) + char;
+   592→      hash |= 0;
+   593→    }
+   594→    return `SIG-${Math.abs(hash).toString(16).toUpperCase()}-${timestamp.toString(36).toUpperCase()}`;
+   595→  },
+   596→
+   597→  // Record Type Definitions
+   598→  getRecordTypes: () => get().recordTypes,
+   599→
+   600→  addRecordType: (typeData) => {
+
+[showing lines 1-600 of 716; use offset=601 with limit to continue reading]

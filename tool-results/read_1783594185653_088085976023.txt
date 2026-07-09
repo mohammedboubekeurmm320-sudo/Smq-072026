@@ -1,0 +1,973 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useMemo } from 'react';
+     4→import {
+     5→  Building2,
+     6→  Factory,
+     7→  Pill,
+     8→  Layers,
+     9→  FlaskConical,
+    10→  CheckCircle2,
+    11→  Circle,
+    12→  ChevronLeft,
+    13→  ChevronRight,
+    14→  X,
+    15→  Plus,
+    16→  Trash2,
+    17→  Shield,
+    18→  FileText,
+    19→  ClipboardCheck,
+    20→  AlertTriangle,
+    21→  GraduationCap,
+    22→  BarChart3,
+    23→  GitBranch,
+    24→  Package,
+    25→  Truck,
+    26→  FileSpreadsheet,
+    27→  ArrowLeftRight,
+    28→  AlertOctagon,
+    29→  TestTube,
+    30→  Users,
+    31→  Rocket,
+    32→  Lock,
+    33→} from 'lucide-react';
+    34→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+    35→import { Button } from '@/components/ui/button';
+    36→import { Input } from '@/components/ui/input';
+    37→import { Label } from '@/components/ui/label';
+    38→import { Checkbox } from '@/components/ui/checkbox';
+    39→import { Progress } from '@/components/ui/progress';
+    40→import { Badge } from '@/components/ui/badge';
+    41→import {
+    42→  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    43→} from '@/components/ui/select';
+    44→import {
+    45→  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    46→} from '@/components/ui/table';
+    47→import type { IndustryType, OrgSettings } from '@/types/qms';
+    48→import { CORE_MODULES, OPTIONAL_MODULES, STANDARDS_BY_INDUSTRY } from '@/types/qms';
+    49→import { useTranslation } from '@/lib/i18n';
+    50→
+    51→// ============================================================================
+    52→// Constants
+    53→// ============================================================================
+    54→
+    55→function useIndustryOptions() {
+    56→  const t = useTranslation();
+    57→  return [
+    58→    {
+    59→      id: 'medical_device' as IndustryType,
+    60→      label: t.industries.medicalDevice,
+    61→      description: 'ISO 13485, MDR, FDA 21 CFR 820',
+    62→      icon: <Factory className="h-8 w-8" />,
+    63→    },
+    64→    {
+    65→      id: 'pharmaceutical' as IndustryType,
+    66→      label: t.industries.pharmaceutical,
+    67→      description: 'ICH Q10, cGMP, FDA 21 CFR 210/211',
+    68→      icon: <Pill className="h-8 w-8" />,
+    69→    },
+    70→    {
+    71→      id: 'combination_product' as IndustryType,
+    72→      label: t.industries.combinationProduct,
+    73→      description: 'MDR + cGMP',
+    74→      icon: <Layers className="h-8 w-8" />,
+    75→    },
+    76→    {
+    77→      id: 'ivd' as IndustryType,
+    78→      label: t.industries.ivd,
+    79→      description: 'IVDR, CLSI',
+    80→      icon: <FlaskConical className="h-8 w-8" />,
+    81→    },
+    82→  ];
+    83→}
+    84→
+    85→function useModuleInfo() {
+    86→  const t = useTranslation();
+    87→  return {
+    88→    documents: { label: t.modules.documents.title, icon: <FileText className="h-5 w-5" />, description: '' },
+    89→    capa: { label: t.modules.capa.title, icon: <Shield className="h-5 w-5" />, description: '' },
+    90→    ncr: { label: t.modules.ncr.title, icon: <AlertTriangle className="h-5 w-5" />, description: '' },
+    91→    audits: { label: t.modules.audit.title, icon: <ClipboardCheck className="h-5 w-5" />, description: '' },
+    92→    training: { label: t.modules.training.title, icon: <GraduationCap className="h-5 w-5" />, description: '' },
+    93→    reports: { label: t.modules.reports.title, icon: <BarChart3 className="h-5 w-5" />, description: '' },
+    94→    compliance: { label: t.modules.compliance.title, icon: <GitBranch className="h-5 w-5" />, description: '' },
+    95→    risks: { label: t.modules.risk.title, icon: <AlertOctagon className="h-5 w-5" />, description: '' },
+    96→    batch_records: { label: t.modules.batch.title, icon: <Package className="h-5 w-5" />, description: '' },
+    97→    suppliers: { label: t.modules.supplier.title, icon: <Truck className="h-5 w-5" />, description: '' },
+    98→    forms: { label: t.nav.forms, icon: <FileSpreadsheet className="h-5 w-5" />, description: '' },
+    99→    change_control: { label: t.nav.changeControl, icon: <ArrowLeftRight className="h-5 w-5" />, description: '' },
+   100→    deviations: { label: t.modules.deviation.title, icon: <AlertOctagon className="h-5 w-5" />, description: '' },
+   101→    oos_oot: { label: t.nav.oosOot, icon: <TestTube className="h-5 w-5" />, description: '' },
+   102→  };
+   103→}
+   104→
+   105→function getRecommendedModules(industry: IndustryType): string[] {
+   106→  const base = [...CORE_MODULES];
+   107→  switch (industry) {
+   108→    case 'medical_device':
+   109→      return [...base, 'risks', 'batch_records', 'suppliers', 'forms', 'change_control'];
+   110→    case 'pharmaceutical':
+   111→      return [...base, 'risks', 'batch_records', 'suppliers', 'forms', 'oos_oot', 'deviations'];
+   112→    case 'combination_product':
+   113→      return [...base, 'risks', 'batch_records', 'suppliers', 'forms', 'change_control', 'deviations', 'oos_oot'];
+   114→    case 'ivd':
+   115→      return [...base, 'risks', 'suppliers', 'forms', 'change_control'];
+   116→    default:
+   117→      return [...base, 'risks', 'batch_records', 'suppliers', 'forms'];
+   118→  }
+   119→}
+   120→
+   121→interface TeamMember {
+   122→  id: string;
+   123→  email: string;
+   124→  role: string;
+   125→}
+   126→
+   127→interface SetupWizardProps {
+   128→  onComplete: (settings: Partial<OrgSettings>, orgName: string) => void;
+   129→  onCancel?: () => void;
+   130→}
+   131→
+   132→export function SetupWizard({ onComplete, onCancel }: SetupWizardProps) {
+   133→  const t = useTranslation();
+   134→  const [currentStep, setCurrentStep] = useState(1);
+   135→
+   136→  // Step 1 state
+   137→  const [orgName, setOrgName] = useState('');
+   138→  const [country, setCountry] = useState('');
+   139→  const [city, setCity] = useState('');
+   140→  const [orgSize, setOrgSize] = useState('');
+   141→
+   142→  // Step 2 state
+   143→  const [industry, setIndustry] = useState<IndustryType | ''>('');
+   144→
+   145→  // Step 3 state
+   146→  const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
+   147→
+   148→  // Step 4 state
+   149→  const [activeModules, setActiveModules] = useState<string[]>([]);
+   150→
+   151→  // Step 5 state
+   152→  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+   153→
+   154→  const STEPS = [
+   155→    { number: 1, label: t.setup.organization },
+   156→    { number: 2, label: t.setup.industry },
+   157→    { number: 3, label: t.setup.standards },
+   158→    { number: 4, label: t.setup.modules },
+   159→    { number: 5, label: t.setup.team },
+   160→    { number: 6, label: t.setup.summary },
+   161→  ];
+   162→
+   163→  // Derived values
+   164→  const availableStandards = useMemo(() => {
+   165→    if (!industry) return [];
+   166→    return STANDARDS_BY_INDUSTRY[industry] || [];
+   167→  }, [industry]);
+   168→
+   169→  const recommendedModules = useMemo(() => {
+   170→    if (!industry) return [];
+   171→    return getRecommendedModules(industry);
+   172→  }, [industry]);
+   173→
+   174→  // When industry changes, reset standards and update modules
+   175→  const handleIndustryChange = (newIndustry: IndustryType) => {
+   176→    setIndustry(newIndustry);
+   177→    const newStandards = STANDARDS_BY_INDUSTRY[newIndustry] || [];
+   178→    setSelectedStandards([...newStandards]);
+   179→    setActiveModules([...getRecommendedModules(newIndustry)]);
+   180→  };
+   181→
+   182→  // Step navigation
+   183→  const canGoNext = (): boolean => {
+   184→    switch (currentStep) {
+   185→      case 1: return orgName.trim().length > 0;
+   186→      case 2: return industry !== '';
+   187→      case 3: return selectedStandards.length > 0;
+   188→      case 4: return activeModules.length > 0;
+   189→      case 5: return true; // optional step
+   190→      case 6: return true;
+   191→      default: return false;
+   192→    }
+   193→  };
+   194→
+   195→  const goNext = () => {
+   196→    if (currentStep < 6 && canGoNext()) {
+   197→      setCurrentStep(currentStep + 1);
+   198→    }
+   199→  };
+   200→
+   201→  const goBack = () => {
+   202→    if (currentStep > 1) {
+   203→      setCurrentStep(currentStep - 1);
+   204→    }
+   205→  };
+   206→
+   207→  // Standard toggle
+   208→  const toggleStandard = (standard: string) => {
+   209→    setSelectedStandards(prev =>
+   210→      prev.includes(standard)
+   211→        ? prev.filter(s => s !== standard)
+   212→        : [...prev, standard]
+   213→    );
+   214→  };
+   215→
+   216→  // Module toggle (only optional)
+   217→  const toggleModule = (module: string) => {
+   218→    if (CORE_MODULES.includes(module as typeof CORE_MODULES[number])) return;
+   219→    setActiveModules(prev =>
+   220→      prev.includes(module)
+   221→        ? prev.filter(m => m !== module)
+   222→        : [...prev, module]
+   223→    );
+   224→  };
+   225→
+   226→  // Team management
+   227→  const addTeamMember = () => {
+   228→    setTeamMembers(prev => [...prev, { id: `team-${Date.now()}`, email: '', role: 'operator' }]);
+   229→  };
+   230→
+   231→  const removeTeamMember = (id: string) => {
+   232→    setTeamMembers(prev => prev.filter(m => m.id !== id));
+   233→  };
+   234→
+   235→  const updateTeamMember = (id: string, field: 'email' | 'role', value: string) => {
+   236→    setTeamMembers(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
+   237→  };
+   238→
+   239→  // Final submission
+   240→  const handleLaunch = () => {
+   241→    const settings: Partial<OrgSettings> = {
+   242→      setup_completed: true,
+   243→      industry_type: industry as IndustryType,
+   244→      applicable_standards: selectedStandards,
+   245→      active_modules: activeModules,
+   246→      company_name: orgName,
+   247→    };
+   248→    onComplete(settings, orgName);
+   249→  };
+   250→
+   251→  const progressValue = ((currentStep - 1) / (STEPS.length - 1)) * 100;
+   252→
+   253→  return (
+   254→    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+   255→      {/* Header with progress */}
+   256→      <div className="border-b bg-background px-6 py-4 flex-shrink-0">
+   257→        <div className="max-w-4xl mx-auto">
+   258→          <div className="flex items-center justify-between mb-4">
+   259→            <div className="flex items-center gap-3">
+   260→              <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
+   261→                <Shield className="h-5 w-5 text-primary-foreground" />
+   262→              </div>
+   263→              <div>
+   264→                <h1 className="text-lg font-bold text-foreground">QMS {t.setup.organization}</h1>
+   265→                <p className="text-xs text-muted-foreground">{currentStep}/{STEPS.length}</p>
+   266→              </div>
+   267→            </div>
+   268→            {onCancel && (
+   269→              <Button variant="ghost" size="sm" onClick={onCancel} className="text-muted-foreground">
+   270→                <X className="h-4 w-4 mr-1" /> {t.setup.cancel}
+   271→              </Button>
+   272→            )}
+   273→          </div>
+   274→
+   275→          {/* Step indicator */}
+   276→          <div className="flex items-center gap-1 mb-2">
+   277→            {STEPS.map((step, index) => (
+   278→              <React.Fragment key={step.number}>
+   279→                <button
+   280→                  onClick={() => {
+   281→                    if (step.number < currentStep) {
+   282→                      setCurrentStep(step.number);
+   283→                    }
+   284→                  }}
+   285→                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+   286→                    step.number === currentStep
+   287→                      ? 'bg-primary/10 text-primary'
+   288→                      : step.number < currentStep
+   289→                      ? 'text-primary cursor-pointer hover:bg-primary/5'
+   290→                      : 'text-muted-foreground'
+   291→                  }`}
+   292→                >
+   293→                  {step.number < currentStep ? (
+   294→                    <CheckCircle2 className="h-4 w-4 text-primary" />
+   295→                  ) : step.number === currentStep ? (
+   296→                    <div className="h-4 w-4 rounded-full border-2 border-primary bg-primary/20 flex items-center justify-center">
+   297→                      <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+   298→                    </div>
+   299→                  ) : (
+   300→                    <Circle className="h-4 w-4" />
+   301→                  )}
+   302→                  <span className="hidden sm:inline">{step.label}</span>
+   303→                  <span className="sm:hidden">{step.number}</span>
+   304→                </button>
+   305→                {index < STEPS.length - 1 && (
+   306→                  <div className={`flex-1 h-0.5 rounded-full transition-colors ${
+   307→                    step.number < currentStep ? 'bg-primary' : 'bg-muted'
+   308→                  }`} />
+   309→                )}
+   310→              </React.Fragment>
+   311→            ))}
+   312→          </div>
+   313→          <Progress value={progressValue} className="h-1.5" />
+   314→        </div>
+   315→      </div>
+   316→
+   317→      {/* Step content */}
+   318→      <div className="flex-1 overflow-auto">
+   319→        <div className="max-w-4xl mx-auto px-6 py-8">
+   320→          {currentStep === 1 && (
+   321→            <StepOrganisation
+   322→              orgName={orgName}
+   323→              setOrgName={setOrgName}
+   324→              country={country}
+   325→              setCountry={setCountry}
+   326→              city={city}
+   327→              setCity={setCity}
+   328→              orgSize={orgSize}
+   329→              setOrgSize={setOrgSize}
+   330→            />
+   331→          )}
+   332→          {currentStep === 2 && (
+   333→            <StepSecteur industry={industry} onSelect={handleIndustryChange} />
+   334→          )}
+   335→          {currentStep === 3 && (
+   336→            <StepNormes
+   337→              availableStandards={availableStandards}
+   338→              selectedStandards={selectedStandards}
+   339→              toggleStandard={toggleStandard}
+   340→            />
+   341→          )}
+   342→          {currentStep === 4 && (
+   343→            <StepModules
+   344→              activeModules={activeModules}
+   345→              toggleModule={toggleModule}
+   346→            />
+   347→          )}
+   348→          {currentStep === 5 && (
+   349→            <StepEquipe
+   350→              teamMembers={teamMembers}
+   351→              addTeamMember={addTeamMember}
+   352→              removeTeamMember={removeTeamMember}
+   353→              updateTeamMember={updateTeamMember}
+   354→            />
+   355→          )}
+   356→          {currentStep === 6 && (
+   357→            <StepRecapitulatif
+   358→              orgName={orgName}
+   359→              country={country}
+   360→              city={city}
+   361→              orgSize={orgSize}
+   362→              industry={industry}
+   363→              selectedStandards={selectedStandards}
+   364→              activeModules={activeModules}
+   365→              teamMembers={teamMembers}
+   366→            />
+   367→          )}
+   368→        </div>
+   369→      </div>
+   370→
+   371→      {/* Footer with navigation */}
+   372→      <div className="border-t bg-background px-6 py-4 flex-shrink-0">
+   373→        <div className="max-w-4xl mx-auto flex items-center justify-between">
+   374→          <Button
+   375→            variant="outline"
+   376→            onClick={goBack}
+   377→            disabled={currentStep === 1}
+   378→          >
+   379→            <ChevronLeft className="h-4 w-4 mr-1" /> {t.setup.previous}
+   380→          </Button>
+   381→          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+   382→            {currentStep === 5 && (
+   383→              <Badge variant="outline" className="text-xs">{t.setup.optionalStep}</Badge>
+   384→            )}
+   385→          </div>
+   386→          {currentStep < 6 ? (
+   387→            <Button onClick={goNext} disabled={!canGoNext()}>
+   388→              {t.setup.next} <ChevronRight className="h-4 w-4 ml-1" />
+   389→            </Button>
+   390→          ) : (
+   391→            <Button onClick={handleLaunch} className="bg-primary">
+   392→              <Rocket className="h-4 w-4 mr-2" /> {t.setup.launch}
+   393→            </Button>
+   394→          )}
+   395→        </div>
+   396→      </div>
+   397→    </div>
+   398→  );
+   399→}
+   400→
+   401→// ============================================================================
+   402→// Step 1: Organisation
+   403→// ============================================================================
+   404→
+   405→interface StepOrganisationProps {
+   406→  orgName: string;
+   407→  setOrgName: (v: string) => void;
+   408→  country: string;
+   409→  setCountry: (v: string) => void;
+   410→  city: string;
+   411→  setCity: (v: string) => void;
+   412→  orgSize: string;
+   413→  setOrgSize: (v: string) => void;
+   414→}
+   415→
+   416→function StepOrganisation({ orgName, setOrgName, country, setCountry, city, setCity, orgSize, setOrgSize }: StepOrganisationProps) {
+   417→  const t = useTranslation();
+   418→
+   419→  const ORG_SIZES = [
+   420→    { value: '1-10', label: '1–10' },
+   421→    { value: '11-50', label: '11–50' },
+   422→    { value: '51-200', label: '51–200' },
+   423→    { value: '200+', label: '200+' },
+   424→  ];
+   425→
+   426→  const COUNTRIES = [
+   427→    { value: 'FR', label: 'France' },
+   428→    { value: 'DE', label: 'Allemagne' },
+   429→    { value: 'CH', label: 'Suisse' },
+   430→    { value: 'BE', label: 'Belgique' },
+   431→    { value: 'UK', label: 'Royaume-Uni' },
+   432→    { value: 'NL', label: 'Pays-Bas' },
+   433→    { value: 'IT', label: 'Italie' },
+   434→    { value: 'ES', label: 'Espagne' },
+   435→    { value: 'US', label: 'États-Unis' },
+   436→    { value: 'CA', label: 'Canada' },
+   437→    { value: 'JP', label: 'Japon' },
+   438→    { value: 'OTHER', label: 'Autre' },
+   439→  ];
+   440→
+   441→  return (
+   442→    <div className="space-y-6">
+   443→      <div>
+   444→        <h2 className="text-2xl font-bold text-foreground">{t.setup.organization}</h2>
+   445→        <p className="text-muted-foreground mt-1">{t.setup.companyName}</p>
+   446→      </div>
+   447→
+   448→      <Card>
+   449→        <CardContent className="pt-6 space-y-6">
+   450→          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+   451→            <div className="space-y-2 md:col-span-2">
+   452→              <Label htmlFor="orgName" className="text-sm font-medium">
+   453→                {t.setup.companyName} <span className="text-destructive">*</span>
+   454→              </Label>
+   455→              <div className="relative">
+   456→                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   457→                <Input
+   458→                  id="orgName"
+   459→                  value={orgName}
+   460→                  onChange={(e) => setOrgName(e.target.value)}
+   461→                  placeholder="PharmaCorp"
+   462→                  className="pl-10"
+   463→                />
+   464→              </div>
+   465→            </div>
+   466→
+   467→            <div className="space-y-2">
+   468→              <Label className="text-sm font-medium">{t.setup.selectCountry}</Label>
+   469→              <Select value={country} onValueChange={setCountry}>
+   470→                <SelectTrigger>
+   471→                  <SelectValue placeholder={t.setup.selectCountry} />
+   472→                </SelectTrigger>
+   473→                <SelectContent>
+   474→                  {COUNTRIES.map(c => (
+   475→                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+   476→                  ))}
+   477→                </SelectContent>
+   478→              </Select>
+   479→            </div>
+   480→
+   481→            <div className="space-y-2">
+   482→              <Label className="text-sm font-medium">Ville / City</Label>
+   483→              <Input
+   484→                value={city}
+   485→                onChange={(e) => setCity(e.target.value)}
+   486→                placeholder="Paris"
+   487→              />
+   488→            </div>
+   489→
+   490→            <div className="space-y-2 md:col-span-2">
+   491→              <Label className="text-sm font-medium">{t.setup.companySize}</Label>
+   492→              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   493→                {ORG_SIZES.map(size => (
+   494→                  <button
+   495→                    key={size.value}
+   496→                    onClick={() => setOrgSize(size.value)}
+   497→                    className={`p-3 rounded-lg border-2 text-center text-sm font-medium transition-all ${
+   498→                      orgSize === size.value
+   499→                        ? 'border-primary bg-primary/5 text-primary'
+   500→                        : 'border-muted hover:border-muted-foreground/30'
+   501→                    }`}
+   502→                  >
+   503→                    {size.label}
+   504→                  </button>
+   505→                ))}
+   506→              </div>
+   507→            </div>
+   508→          </div>
+   509→        </CardContent>
+   510→      </Card>
+   511→    </div>
+   512→  );
+   513→}
+   514→
+   515→// ============================================================================
+   516→// Step 2: Industry
+   517→// ============================================================================
+   518→
+   519→interface StepSecteurProps {
+   520→  industry: IndustryType | '';
+   521→  onSelect: (industry: IndustryType) => void;
+   522→}
+   523→
+   524→function StepSecteur({ industry, onSelect }: StepSecteurProps) {
+   525→  const t = useTranslation();
+   526→  const industryOptions = useIndustryOptions();
+   527→
+   528→  return (
+   529→    <div className="space-y-6">
+   530→      <div>
+   531→        <h2 className="text-2xl font-bold text-foreground">{t.setup.industry}</h2>
+   532→      </div>
+   533→
+   534→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   535→        {industryOptions.map(opt => (
+   536→          <Card
+   537→            key={opt.id}
+   538→            className={`cursor-pointer transition-all hover:shadow-md ${
+   539→              industry === opt.id
+   540→                ? 'border-2 border-primary shadow-md'
+   541→                : 'border-2 border-transparent hover:border-muted-foreground/20'
+   542→            }`}
+   543→            onClick={() => onSelect(opt.id)}
+   544→          >
+   545→            <CardContent className="pt-6 pb-6">
+   546→              <div className="flex items-start gap-4">
+   547→                <div className={`p-3 rounded-xl ${
+   548→                  industry === opt.id
+   549→                    ? 'bg-primary/10 text-primary'
+   550→                    : 'bg-muted text-muted-foreground'
+   551→                }`}>
+   552→                  {opt.icon}
+   553→                </div>
+   554→                <div className="flex-1">
+   555→                  <h3 className="font-semibold text-lg">{opt.label}</h3>
+   556→                  <p className="text-sm text-muted-foreground mt-1">{opt.description}</p>
+   557→                  {industry === opt.id && (
+   558→                    <Badge className="mt-2" variant="default">{t.setup.selected}</Badge>
+   559→                  )}
+   560→                </div>
+   561→              </div>
+   562→            </CardContent>
+   563→          </Card>
+   564→        ))}
+   565→      </div>
+   566→    </div>
+   567→  );
+   568→}
+   569→
+   570→// ============================================================================
+   571→// Step 3: Standards
+   572→// ============================================================================
+   573→
+   574→interface StepNormesProps {
+   575→  availableStandards: string[];
+   576→  selectedStandards: string[];
+   577→  toggleStandard: (standard: string) => void;
+   578→}
+   579→
+   580→function StepNormes({ availableStandards, selectedStandards, toggleStandard }: StepNormesProps) {
+   581→  const t = useTranslation();
+   582→
+   583→  return (
+   584→    <div className="space-y-6">
+   585→      <div>
+   586→        <h2 className="text-2xl font-bold text-foreground">{t.setup.applicableStandards}</h2>
+   587→      </div>
+   588→
+   589→      {availableStandards.length === 0 ? (
+   590→        <Card>
+   591→          <CardContent className="pt-6 text-center text-muted-foreground py-12">
+   592→            <AlertTriangle className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+   593→            <p>{t.setup.industry}</p>
+   594→          </CardContent>
+   595→        </Card>
+   596→      ) : (
+   597→        <Card>
+   598→          <CardContent className="pt-6 space-y-1">
+   599→            <div className="flex items-center justify-between mb-4">
+   600→              <p className="text-sm text-muted-foreground">
+   601→                {selectedStandards.length} {t.setup.selected.toLowerCase()}
+   602→              </p>
+   603→              <Button
+   604→                variant="outline"
+   605→                size="sm"
+   606→                onClick={() => {
+   607→                  if (selectedStandards.length === availableStandards.length) {
+   608→                    availableStandards.forEach(s => toggleStandard(s));
+   609→                  } else {
+   610→                    availableStandards.forEach(s => {
+   611→                      if (!selectedStandards.includes(s)) toggleStandard(s);
+   612→                    });
+   613→                  }
+   614→                }}
+   615→              >
+   616→                {selectedStandards.length === availableStandards.length ? '✕' : '✓'}
+   617→              </Button>
+   618→            </div>
+   619→            {availableStandards.map(standard => {
+   620→              const isSelected = selectedStandards.includes(standard);
+   621→              return (
+   622→                <div
+   623→                  key={standard}
+   624→                  onClick={() => toggleStandard(standard)}
+   625→                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+   626→                    isSelected ? 'bg-primary/5' : 'hover:bg-muted/50'
+   627→                  }`}
+   628→                >
+   629→                  <Checkbox
+   630→                    checked={isSelected}
+   631→                    onCheckedChange={() => toggleStandard(standard)}
+   632→                  />
+   633→                  <div className="flex-1">
+   634→                    <p className="font-medium text-sm">{standard}</p>
+   635→                  </div>
+   636→                  {isSelected && (
+   637→                    <CheckCircle2 className="h-4 w-4 text-primary" />
+   638→                  )}
+   639→                </div>
+   640→              );
+   641→            })}
+   642→          </CardContent>
+   643→        </Card>
+   644→      )}
+   645→    </div>
+   646→  );
+   647→}
+   648→
+   649→// ============================================================================
+   650→// Step 4: Modules
+   651→// ============================================================================
+   652→
+   653→interface StepModulesProps {
+   654→  activeModules: string[];
+   655→  toggleModule: (module: string) => void;
+   656→}
+   657→
+   658→function StepModules({ activeModules, toggleModule }: StepModulesProps) {
+   659→  const t = useTranslation();
+   660→  const moduleInfo = useModuleInfo();
+   661→  const coreModules = CORE_MODULES as readonly string[];
+   662→  const optionalModules = OPTIONAL_MODULES as readonly string[];
+   663→
+   664→  return (
+   665→    <div className="space-y-6">
+   666→      <div>
+   667→        <h2 className="text-2xl font-bold text-foreground">{t.setup.modules}</h2>
+   668→      </div>
+   669→
+   670→      {/* Core modules */}
+   671→      <div>
+   672→        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+   673→          <Lock className="h-4 w-4" /> {t.setup.coreModules}
+   674→        </h3>
+   675→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   676→          {coreModules.map(mod => {
+   677→            const info = moduleInfo[mod as keyof typeof moduleInfo];
+   678→            if (!info) return null;
+   679→            return (
+   680→              <Card key={mod} className="border-2 border-primary/20 bg-primary/5">
+   681→                <CardContent className="pt-4 pb-4">
+   682→                  <div className="flex items-start gap-3">
+   683→                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+   684→                      {info.icon}
+   685→                    </div>
+   686→                    <div className="flex-1 min-w-0">
+   687→                      <div className="flex items-center gap-2">
+   688→                        <p className="font-medium text-sm">{info.label}</p>
+   689→                        <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" />
+   690→                      </div>
+   691→                    </div>
+   692→                  </div>
+   693→                </CardContent>
+   694→              </Card>
+   695→            );
+   696→          })}
+   697→        </div>
+   698→      </div>
+   699→
+   700→      {/* Optional modules */}
+   701→      <div>
+   702→        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+   703→          {t.setup.optionalModules}
+   704→        </h3>
+   705→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   706→          {optionalModules.map(mod => {
+   707→            const info = moduleInfo[mod as keyof typeof moduleInfo];
+   708→            if (!info) return null;
+   709→            const isActive = activeModules.includes(mod);
+   710→            return (
+   711→              <Card
+   712→                key={mod}
+   713→                className={`cursor-pointer transition-all ${
+   714→                  isActive
+   715→                    ? 'border-2 border-primary bg-primary/5'
+   716→                    : 'border-2 border-transparent hover:border-muted-foreground/20'
+   717→                }`}
+   718→                onClick={() => toggleModule(mod)}
+   719→              >
+   720→                <CardContent className="pt-4 pb-4">
+   721→                  <div className="flex items-start gap-3">
+   722→                    <div className={`p-2 rounded-lg ${
+   723→                      isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+   724→                    }`}>
+   725→                      {info.icon}
+   726→                    </div>
+   727→                    <div className="flex-1 min-w-0">
+   728→                      <p className="font-medium text-sm">{info.label}</p>
+   729→                    </div>
+   730→                    <Checkbox checked={isActive} onCheckedChange={() => toggleModule(mod)} />
+   731→                  </div>
+   732→                </CardContent>
+   733→              </Card>
+   734→            );
+   735→          })}
+   736→        </div>
+   737→      </div>
+   738→    </div>
+   739→  );
+   740→}
+   741→
+   742→// ============================================================================
+   743→// Step 5: Team
+   744→// ============================================================================
+   745→
+   746→interface StepEquipeProps {
+   747→  teamMembers: TeamMember[];
+   748→  addTeamMember: () => void;
+   749→  removeTeamMember: (id: string) => void;
+   750→  updateTeamMember: (id: string, field: 'email' | 'role', value: string) => void;
+   751→}
+   752→
+   753→function StepEquipe({ teamMembers, addTeamMember, removeTeamMember, updateTeamMember }: StepEquipeProps) {
+   754→  const t = useTranslation();
+   755→
+   756→  const TEAM_ROLES = [
+   757→    { value: 'admin', label: 'Admin' },
+   758→    { value: 'quality_manager', label: 'Quality Manager' },
+   759→    { value: 'auditor', label: 'Auditor' },
+   760→    { value: 'document_controller', label: 'Document Controller' },
+   761→    { value: 'executive', label: 'Executive' },
+   762→    { value: 'operator', label: 'Operator' },
+   763→  ];
+   764→
+   765→  return (
+   766→    <div className="space-y-6">
+   767→      <div>
+   768→        <h2 className="text-2xl font-bold text-foreground">{t.setup.team}</h2>
+   769→        <p className="text-muted-foreground mt-1">{t.setup.optionalStep}</p>
+   770→      </div>
+   771→
+   772→      <Card>
+   773→        <CardContent className="pt-6 space-y-4">
+   774→          {teamMembers.length > 0 && (
+   775→            <Table>
+   776→              <TableHeader>
+   777→                <TableRow>
+   778→                  <TableHead>{t.auth.email}</TableHead>
+   779→                  <TableHead className="w-[200px]">Rôle</TableHead>
+   780→                  <TableHead className="w-[50px]"></TableHead>
+   781→                </TableRow>
+   782→              </TableHeader>
+   783→              <TableBody>
+   784→                {teamMembers.map(member => (
+   785→                  <TableRow key={member.id}>
+   786→                    <TableCell>
+   787→                      <Input
+   788→                        type="email"
+   789→                        value={member.email}
+   790→                        onChange={(e) => updateTeamMember(member.id, 'email', e.target.value)}
+   791→                        placeholder="email@company.com"
+   792→                        className="h-9"
+   793→                      />
+   794→                    </TableCell>
+   795→                    <TableCell>
+   796→                      <Select value={member.role} onValueChange={(v) => updateTeamMember(member.id, 'role', v)}>
+   797→                        <SelectTrigger className="h-9">
+   798→                          <SelectValue />
+   799→                        </SelectTrigger>
+   800→                        <SelectContent>
+   801→                          {TEAM_ROLES.map(r => (
+   802→                            <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+   803→                          ))}
+   804→                        </SelectContent>
+   805→                      </Select>
+   806→                    </TableCell>
+   807→                    <TableCell>
+   808→                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeTeamMember(member.id)}>
+   809→                        <Trash2 className="h-4 w-4" />
+   810→                      </Button>
+   811→                    </TableCell>
+   812→                  </TableRow>
+   813→                ))}
+   814→              </TableBody>
+   815→            </Table>
+   816→          )}
+   817→
+   818→          {teamMembers.length === 0 && (
+   819→            <div className="text-center py-8 text-muted-foreground">
+   820→              <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+   821→              <p className="text-sm">{t.common.noData}</p>
+   822→            </div>
+   823→          )}
+   824→
+   825→          <Button variant="outline" onClick={addTeamMember} className="w-full">
+   826→            <Plus className="h-4 w-4 mr-2" /> +
+   827→          </Button>
+   828→        </CardContent>
+   829→      </Card>
+   830→    </div>
+   831→  );
+   832→}
+   833→
+   834→// ============================================================================
+   835→// Step 6: Summary
+   836→// ============================================================================
+   837→
+   838→interface StepRecapitulatifProps {
+   839→  orgName: string;
+   840→  country: string;
+   841→  city: string;
+   842→  orgSize: string;
+   843→  industry: IndustryType | '';
+   844→  selectedStandards: string[];
+   845→  activeModules: string[];
+   846→  teamMembers: TeamMember[];
+   847→}
+   848→
+   849→function StepRecapitulatif({ orgName, country, city, orgSize, industry, selectedStandards, activeModules, teamMembers }: StepRecapitulatifProps) {
+   850→  const t = useTranslation();
+   851→  const industryOptions = useIndustryOptions();
+   852→  const moduleInfo = useModuleInfo();
+   853→
+   854→  const industryLabel = industryOptions.find(o => o.id === industry)?.label || industry;
+   855→
+   856→  return (
+   857→    <div className="space-y-6">
+   858→      <div>
+   859→        <h2 className="text-2xl font-bold text-foreground">{t.setup.summary}</h2>
+   860→      </div>
+   861→
+   862→      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   863→        {/* Organisation */}
+   864→        <Card>
+   865→          <CardHeader className="pb-3">
+   866→            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+   867→              <Building2 className="h-4 w-4" /> {t.setup.organization}
+   868→            </CardTitle>
+   869→          </CardHeader>
+   870→          <CardContent className="space-y-2">
+   871→            <div className="flex justify-between">
+   872→              <span className="text-sm text-muted-foreground">{t.setup.companyName}</span>
+   873→              <span className="text-sm font-medium">{orgName}</span>
+   874→            </div>
+   875→            {country && (
+   876→              <div className="flex justify-between">
+   877→                <span className="text-sm text-muted-foreground">{t.setup.selectCountry}</span>
+   878→                <span className="text-sm font-medium">{country}</span>
+   879→              </div>
+   880→            )}
+   881→            {city && (
+   882→              <div className="flex justify-between">
+   883→                <span className="text-sm text-muted-foreground">Ville / City</span>
+   884→                <span className="text-sm font-medium">{city}</span>
+   885→              </div>
+   886→            )}
+   887→            {orgSize && (
+   888→              <div className="flex justify-between">
+   889→                <span className="text-sm text-muted-foreground">{t.setup.companySize}</span>
+   890→                <span className="text-sm font-medium">{orgSize}</span>
+   891→              </div>
+   892→            )}
+   893→          </CardContent>
+   894→        </Card>
+   895→
+   896→        {/* Industry */}
+   897→        <Card>
+   898→          <CardHeader className="pb-3">
+   899→            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+   900→              <Factory className="h-4 w-4" /> {t.setup.industry}
+   901→            </CardTitle>
+   902→          </CardHeader>
+   903→          <CardContent>
+   904→            <Badge variant="default" className="text-sm">{industryLabel}</Badge>
+   905→          </CardContent>
+   906→        </Card>
+   907→
+   908→        {/* Standards */}
+   909→        <Card>
+   910→          <CardHeader className="pb-3">
+   911→            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+   912→              <Shield className="h-4 w-4" /> {t.setup.applicableStandards}
+   913→            </CardTitle>
+   914→          </CardHeader>
+   915→          <CardContent>
+   916→            <div className="flex flex-wrap gap-2">
+   917→              {selectedStandards.map(standard => (
+   918→                <Badge key={standard} variant="outline" className="text-xs">{standard}</Badge>
+   919→              ))}
+   920→            </div>
+   921→          </CardContent>
+   922→        </Card>
+   923→
+   924→        {/* Modules */}
+   925→        <Card>
+   926→          <CardHeader className="pb-3">
+   927→            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+   928→              <Package className="h-4 w-4" /> {t.setup.modules} ({activeModules.length})
+   929→            </CardTitle>
+   930→          </CardHeader>
+   931→          <CardContent>
+   932→            <div className="flex flex-wrap gap-2">
+   933→              {activeModules.map(mod => {
+   934→                const info = moduleInfo[mod as keyof typeof moduleInfo];
+   935→                return (
+   936→                  <Badge key={mod} variant="secondary" className="text-xs">
+   937→                    {info?.label || mod}
+   938→                  </Badge>
+   939→                );
+   940→              })}
+   941→            </div>
+   942→          </CardContent>
+   943→        </Card>
+   944→
+   945→        {/* Team */}
+   946→        <Card className={teamMembers.length > 0 ? 'md:col-span-2' : ''}>
+   947→          <CardHeader className="pb-3">
+   948→            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+   949→              <Users className="h-4 w-4" /> {t.setup.team}
+   950→            </CardTitle>
+   951→          </CardHeader>
+   952→          <CardContent>
+   953→            {teamMembers.length > 0 ? (
+   954→              <div className="space-y-2">
+   955→                {teamMembers.map(member => (
+   956→                  <div key={member.id} className="flex items-center justify-between text-sm">
+   957→                    <span>{member.email || '—'}</span>
+   958→                    <Badge variant="outline" className="text-xs">
+   959→                      {member.role.replace('_', ' ')}
+   960→                    </Badge>
+   961→                  </div>
+   962→                ))}
+   963→              </div>
+   964→            ) : (
+   965→              <p className="text-sm text-muted-foreground">{t.common.noData}</p>
+   966→            )}
+   967→          </CardContent>
+   968→        </Card>
+   969→      </div>
+   970→    </div>
+   971→  );
+   972→}
+   973→

@@ -1,0 +1,602 @@
+     1→-- ============================================================================
+     2→-- SMQ ISO 13485 PRO — Initial Database Schema
+     3→-- ============================================================================
+     4→-- Generated from TypeScript types in src/types/qms.ts
+     5→-- Target: PostgreSQL 15+ (Supabase)
+     6→--
+     7→-- Architecture: Hybrid 2-Layer Supervision
+     8→--   Layer 1: form_templates (Template Approval — ISO 13485 §4.2.3)
+     9→--   Layer 2: form_instances (Execution — ISO 13485 §4.2.4)
+    10→--
+    11→-- 10 Record Modules: CAPA, NCR, Deviation, Change Control, Audit,
+    12→--                    Risk, Training, Supplier, Batch Record, OOS/OOT
+    13→--
+    14→-- Execution order: organizations → profiles → ... → circular FKs at end
+    15→-- Idempotent: Uses CREATE TABLE IF NOT EXISTS / DROP IF EXISTS for enums
+    16→-- ============================================================================
+    17→
+    18→BEGIN;
+    19→
+    20→-- ============================================================================
+    21→-- EXTENSIONS
+    22→-- ============================================================================
+    23→
+    24→CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    25→CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    26→
+    27→-- ============================================================================
+    28→-- ENUM TYPES (for data integrity & ISO 13485 compliance)
+    29→-- Drop existing then recreate to allow re-execution
+    30→-- ============================================================================
+    31→
+    32→DROP TYPE IF EXISTS user_role CASCADE;
+    33→DROP TYPE IF EXISTS subscription_status CASCADE;
+    34→DROP TYPE IF EXISTS org_member_role CASCADE;
+    35→DROP TYPE IF EXISTS org_member_status CASCADE;
+    36→DROP TYPE IF EXISTS document_type CASCADE;
+    37→DROP TYPE IF EXISTS document_status CASCADE;
+    38→DROP TYPE IF EXISTS document_classification CASCADE;
+    39→DROP TYPE IF EXISTS validation_phase CASCADE;
+    40→DROP TYPE IF EXISTS signature_type CASCADE;
+    41→DROP TYPE IF EXISTS capa_type CASCADE;
+    42→DROP TYPE IF EXISTS capa_status CASCADE;
+    43→DROP TYPE IF EXISTS capa_priority CASCADE;
+    44→DROP TYPE IF EXISTS capa_source CASCADE;
+    45→DROP TYPE IF EXISTS root_cause_category CASCADE;
+    46→DROP TYPE IF EXISTS ncr_type CASCADE;
+    47→DROP TYPE IF EXISTS ncr_status CASCADE;
+    48→DROP TYPE IF EXISTS ncr_severity CASCADE;
+    49→DROP TYPE IF EXISTS ncr_disposition CASCADE;
+    50→DROP TYPE IF EXISTS deviation_type CASCADE;
+    51→DROP TYPE IF EXISTS deviation_status CASCADE;
+    52→DROP TYPE IF EXISTS deviation_severity CASCADE;
+    53→DROP TYPE IF EXISTS deviation_category CASCADE;
+    54→DROP TYPE IF EXISTS deviation_product_stage CASCADE;
+    55→DROP TYPE IF EXISTS cc_type CASCADE;
+    56→DROP TYPE IF EXISTS cc_status CASCADE;
+    57→DROP TYPE IF EXISTS cc_priority CASCADE;
+    58→DROP TYPE IF EXISTS cc_category CASCADE;
+    59→DROP TYPE IF EXISTS audit_type CASCADE;
+    60→DROP TYPE IF EXISTS audit_status CASCADE;
+    61→DROP TYPE IF EXISTS training_type CASCADE;
+    62→DROP TYPE IF EXISTS training_status CASCADE;
+    63→DROP TYPE IF EXISTS risk_category CASCADE;
+    64→DROP TYPE IF EXISTS risk_level CASCADE;
+    65→DROP TYPE IF EXISTS risk_status CASCADE;
+    66→DROP TYPE IF EXISTS batch_status CASCADE;
+    67→DROP TYPE IF EXISTS batch_step_status CASCADE;
+    68→DROP TYPE IF EXISTS step_type CASCADE;
+    69→DROP TYPE IF EXISTS raw_material_status CASCADE;
+    70→DROP TYPE IF EXISTS supplier_category CASCADE;
+    71→DROP TYPE IF EXISTS supplier_status CASCADE;
+    72→DROP TYPE IF EXISTS qualification_method CASCADE;
+    73→DROP TYPE IF EXISTS form_template_status CASCADE;
+    74→DROP TYPE IF EXISTS form_template_module_type CASCADE;
+    75→DROP TYPE IF EXISTS form_instance_status CASCADE;
+    76→DROP TYPE IF EXISTS audit_action CASCADE;
+    77→DROP TYPE IF EXISTS prerequisite_record_type CASCADE;
+    78→
+    79→-- User roles & permissions
+    80→CREATE TYPE user_role AS ENUM (
+    81→  'admin', 'quality_manager', 'auditor', 'document_controller', 'executive', 'operator'
+    82→);
+    83→
+    84→-- Organization
+    85→CREATE TYPE subscription_status AS ENUM ('trial', 'active', 'suspended', 'cancelled');
+    86→CREATE TYPE org_member_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+    87→CREATE TYPE org_member_status AS ENUM ('active', 'inactive', 'pending');
+    88→
+    89→-- Document
+    90→CREATE TYPE document_type AS ENUM (
+    91→  'MANUEL', 'POLITIQUE', 'INDICATEUR', 'PROCESS_MAP', 'ORGANIGRAMME',
+    92→  'REGLEMENTAIRE', 'MAPPING',
+    93→  'PROCEDURE', 'INSTRUCTION', 'FORMULAIRE', 'REGISTRE', 'ENREGISTREMENT', 'MASTER_BATCH',
+    94→  'SOP', 'WI', 'Form', 'Policy', 'Specification', 'Technical',
+    95→  'Risk Analysis', 'Validation Protocol', 'Record', 'Manual', 'Instruction',
+    96→  'Register', 'Master Batch', 'Procedure', 'Process Map', 'Organigram'
+    97→);
+    98→
+    99→CREATE TYPE document_status AS ENUM ('Draft', 'Under Review', 'Approved', 'Effective', 'Obsolete', 'Withdrawn');
+   100→CREATE TYPE document_classification AS ENUM ('Internal', 'External', 'Regulatory', 'Confidential');
+   101→CREATE TYPE validation_phase AS ENUM ('IQ', 'OQ', 'PQ', 'Full');
+   102→
+   103→-- Electronic Signature
+   104→CREATE TYPE signature_type AS ENUM ('approval', 'rejection', 'review', 'verification');
+   105→
+   106→-- CAPA
+   107→CREATE TYPE capa_type AS ENUM ('Corrective', 'Preventive');
+   108→CREATE TYPE capa_status AS ENUM ('Open', 'Investigation', 'Implementation', 'Effectiveness Check', 'Closed');
+   109→CREATE TYPE capa_priority AS ENUM ('Critical', 'High', 'Medium', 'Low');
+   110→CREATE TYPE capa_source AS ENUM ('Non-Conformance', 'Audit Finding', 'Customer Complaint', 'Management Review', 'Process Monitoring', 'Supplier Issue');
+   111→CREATE TYPE root_cause_category AS ENUM ('Man', 'Machine', 'Method', 'Material', 'Measurement', 'Environment', 'Management');
+   112→
+   113→-- NCR
+   114→CREATE TYPE ncr_type AS ENUM ('Product', 'Process', 'System', 'Supplier', 'OOS', 'OOT');
+   115→CREATE TYPE ncr_status AS ENUM ('Open', 'Under Investigation', 'Pending Disposition', 'Closed');
+   116→CREATE TYPE ncr_severity AS ENUM ('Critical', 'Major', 'Minor');
+   117→CREATE TYPE ncr_disposition AS ENUM ('Use As Is', 'Rework', 'Scrap', 'Return to Supplier', 'Concession', 'Pending');
+   118→
+   119→-- Deviation
+   120→CREATE TYPE deviation_type AS ENUM ('Planned', 'Unplanned');
+   121→CREATE TYPE deviation_status AS ENUM ('Open', 'Under Investigation', 'Pending QA Review', 'Approved', 'Closed');
+   122→CREATE TYPE deviation_severity AS ENUM ('Critical', 'Major', 'Minor');
+   123→CREATE TYPE deviation_category AS ENUM ('Process', 'Equipment', 'Material', 'Environment', 'Personnel', 'Documentation');
+   124→CREATE TYPE deviation_product_stage AS ENUM ('Raw Material', 'In-Process', 'Finished Product', 'Stability', 'Other');
+   125→
+   126→-- Change Control
+   127→CREATE TYPE cc_type AS ENUM ('Planned', 'Unplanned', 'Emergency');
+   128→CREATE TYPE cc_status AS ENUM ('Requested', 'Under Review', 'Approved', 'In Implementation', 'Completed', 'Rejected');
+   129→CREATE TYPE cc_priority AS ENUM ('Critical', 'High', 'Medium', 'Low');
+   130→CREATE TYPE cc_category AS ENUM (
+   131→  'Process', 'Equipment', 'Facility', 'Document', 'Material',
+   132→  'Computer System', 'Organizational', 'Manufacturing', 'Regulatory',
+   133→  'Supply Chain', 'Warehouse', 'Other'
+   134→);
+   135→
+   136→-- Audit
+   137→CREATE TYPE audit_type AS ENUM ('Internal', 'External', 'Supplier');
+   138→CREATE TYPE audit_status AS ENUM ('Planned', 'In Progress', 'Completed');
+   139→
+   140→-- Training
+   141→CREATE TYPE training_type AS ENUM ('Onboarding', 'SOP', 'Regulatory', 'Skill', 'Certification');
+   142→CREATE TYPE training_status AS ENUM ('Planned', 'In Progress', 'Completed', 'Overdue');
+   143→
+   144→-- Risk
+   145→CREATE TYPE risk_category AS ENUM ('Product', 'Process', 'System', 'Supplier');
+   146→CREATE TYPE risk_level AS ENUM ('Low', 'Medium', 'High', 'Critical');
+   147→CREATE TYPE risk_status AS ENUM ('Open', 'Mitigated', 'Accepted', 'Closed');
+   148→
+   149→-- Batch Record
+   150→CREATE TYPE batch_status AS ENUM ('In Progress', 'Pending QA Review', 'Released', 'Rejected', 'Quarantine');
+   151→CREATE TYPE batch_step_status AS ENUM ('Pending', 'In Progress', 'Completed', 'Failed');
+   152→CREATE TYPE step_type AS ENUM ('Weighing', 'Mixing', 'Filtration', 'Filling', 'Inspection', 'Labeling', 'Packaging', 'QC Testing', 'Other');
+   153→CREATE TYPE raw_material_status AS ENUM ('Verified', 'Pending', 'Rejected');
+   154→
+   155→-- Supplier
+   156→CREATE TYPE supplier_category AS ENUM ('Raw Material', 'Packaging', 'Equipment', 'Service', 'Contract Manufacturer', 'Laboratory', 'Other');
+   157→CREATE TYPE supplier_status AS ENUM ('Qualified', 'Conditional', 'Disqualified', 'Under Evaluation');
+   158→CREATE TYPE qualification_method AS ENUM ('On-Site Audit', 'Questionnaire', 'Certificate Review', 'Third-Party Assessment', 'Historical Performance');
+   159→
+   160→-- Form Template (Layer 1)
+   161→CREATE TYPE form_template_status AS ENUM ('Draft', 'Under_Review', 'Approved', 'Obsolete');
+   162→CREATE TYPE form_template_module_type AS ENUM (
+   163→  'capa', 'ncr', 'deviation', 'change_control',
+   164→  'audit', 'risk', 'training', 'supplier',
+   165→  'batch_record', 'oos_oot', 'general'
+   166→);
+   167→
+   168→-- Form Instance (Layer 2)
+   169→CREATE TYPE form_instance_status AS ENUM ('Draft', 'Submitted', 'Approved', 'Rejected');
+   170→
+   171→-- Audit Trail
+   172→CREATE TYPE audit_action AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'APPROVE', 'REJECT', 'SIGN', 'LOGIN', 'EXPORT');
+   173→
+   174→-- Document Prerequisite
+   175→CREATE TYPE prerequisite_record_type AS ENUM ('CAPA', 'NCR', 'TRAINING', 'RISK', 'AUDIT', 'CHANGE_CONTROL', 'DEVIATION');
+   176→
+   177→
+   178→-- ============================================================================
+   179→-- TABLES — Drop existing then recreate (idempotent)
+   180→-- Order matters: drop in reverse dependency order
+   181→-- ============================================================================
+   182→
+   183→DROP TABLE IF EXISTS audit_trails CASCADE;
+   184→DROP TABLE IF EXISTS suppliers CASCADE;
+   185→DROP TABLE IF EXISTS batch_records CASCADE;
+   186→DROP TABLE IF EXISTS risks CASCADE;
+   187→DROP TABLE IF EXISTS training CASCADE;
+   188→DROP TABLE IF EXISTS audits CASCADE;
+   189→DROP TABLE IF EXISTS change_controls CASCADE;
+   190→DROP TABLE IF EXISTS deviations CASCADE;
+   191→DROP TABLE IF EXISTS non_conformances CASCADE;
+   192→DROP TABLE IF EXISTS capas CASCADE;
+   193→DROP TABLE IF EXISTS form_instances CASCADE;
+   194→DROP TABLE IF EXISTS form_templates CASCADE;
+   195→DROP TABLE IF EXISTS document_prerequisites CASCADE;
+   196→DROP TABLE IF EXISTS electronic_signatures CASCADE;
+   197→DROP TABLE IF EXISTS documents CASCADE;
+   198→DROP TABLE IF EXISTS organization_members CASCADE;
+   199→DROP TABLE IF EXISTS profiles CASCADE;
+   200→DROP TABLE IF EXISTS organizations CASCADE;
+   201→DROP TABLE IF EXISTS departments CASCADE;
+   202→DROP TABLE IF EXISTS document_triggers CASCADE;
+   203→DROP TABLE IF EXISTS document_relationships CASCADE;
+   204→DROP TABLE IF EXISTS document_code_sequences CASCADE;
+   205→
+   206→-- Drop views that depend on these tables
+   207→DROP VIEW IF EXISTS document_hierarchy CASCADE;
+   208→DROP VIEW IF EXISTS document_trigger_graph CASCADE;
+   209→
+   210→-- ============================================================================
+   211→-- TABLE 1: organizations
+   212→-- ============================================================================
+   213→
+   214→CREATE TABLE organizations (
+   215→  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   216→  name          text NOT NULL,
+   217→  slug          text NOT NULL UNIQUE,
+   218→  subscription_status subscription_status NOT NULL DEFAULT 'trial',
+   219→  settings      jsonb DEFAULT '{}',
+   220→  created_at    timestamptz NOT NULL DEFAULT now(),
+   221→  updated_at    timestamptz NOT NULL DEFAULT now()
+   222→);
+   223→
+   224→COMMENT ON TABLE organizations IS 'Multi-tenant organizations — each org isolates its QMS data';
+   225→COMMENT ON COLUMN organizations.settings IS 'JSON-serialized OrgSettings (industry_type, active_modules, etc.)';
+   226→
+   227→
+   228→-- ============================================================================
+   229→-- TABLE 2: profiles
+   230→-- ============================================================================
+   231→
+   232→CREATE TABLE profiles (
+   233→  id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+   234→  email         text NOT NULL,
+   235→  full_name     text,
+   236→  role          user_role NOT NULL DEFAULT 'operator',
+   237→  department    text,
+   238→  job_title     text,
+   239→  phone         text,
+   240→  avatar_url    text,
+   241→  organization_id uuid REFERENCES organizations(id),
+   242→  created_at    timestamptz NOT NULL DEFAULT now(),
+   243→  updated_at    timestamptz NOT NULL DEFAULT now()
+   244→);
+   245→
+   246→COMMENT ON TABLE profiles IS 'User profiles linked to Supabase auth.users — stores QMS roles and org membership';
+   247→
+   248→
+   249→-- ============================================================================
+   250→-- TABLE 3: organization_members
+   251→-- ============================================================================
+   252→
+   253→CREATE TABLE organization_members (
+   254→  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   255→  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+   256→  user_id         uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+   257→  role            org_member_role NOT NULL DEFAULT 'member',
+   258→  status          org_member_status NOT NULL DEFAULT 'active',
+   259→  invited_by      uuid REFERENCES profiles(id),
+   260→  created_at      timestamptz NOT NULL DEFAULT now(),
+   261→  UNIQUE(organization_id, user_id)
+   262→);
+   263→
+   264→COMMENT ON TABLE organization_members IS 'Organization membership with role-based access';
+   265→
+   266→
+   267→-- ============================================================================
+   268→-- TABLE 4: documents
+   269→-- ============================================================================
+   270→
+   271→CREATE TABLE documents (
+   272→  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   273→  document_number       text NOT NULL,
+   274→  title                 text NOT NULL,
+   275→  doc_type              document_type NOT NULL,
+   276→  version               text NOT NULL,
+   277→  status                document_status NOT NULL DEFAULT 'Draft',
+   278→  effective_date        timestamptz,
+   279→  expiration_date       timestamptz,
+   280→  owner                 text,
+   281→  department            text,
+   282→  last_reviewed         timestamptz,
+   283→  next_review           timestamptz,
+   284→  description           text,
+   285→  classification        document_classification,
+   286→  retention_period      text,
+   287→  doc_scope             text,
+   288→  doc_references        text,
+   289→  type_specific_data    jsonb,
+   290→  parent_document_id    uuid REFERENCES documents(id),
+   291→  document_level        smallint CHECK (document_level BETWEEN 1 AND 4),
+   292→  validation_phase      validation_phase,
+   293→  parent_validation_id  uuid,
+   294→  author_id             uuid REFERENCES profiles(id),
+   295→  organization_id       uuid REFERENCES organizations(id),
+   296→  created_by_id         uuid REFERENCES profiles(id),
+   297→  created_at            timestamptz NOT NULL DEFAULT now(),
+   298→  updated_at            timestamptz NOT NULL DEFAULT now(),
+   299→  -- P0: Qwen-aligned fields
+   300→  code                  text,
+   301→  iso_clause            text,
+   302→  triggers              jsonb DEFAULT '[]',
+   303→  child_codes           jsonb DEFAULT '[]',
+   304→  is_prerequisite       boolean DEFAULT false,
+   305→  review_cycle_months   integer,
+   306→  department_code       text
+   307→);
+   308→
+   309→COMMENT ON TABLE documents IS 'ISO 13485 §4.2.3 — Controlled documents with 4-level hierarchy (Strategique→Enregistrement)';
+   310→COMMENT ON COLUMN documents.document_level IS '1=Strategique, 2=Transversal, 3=Metier/Technique, 4=Enregistrement/Formulaire';
+   311→COMMENT ON COLUMN documents.code IS 'Qwen document code (e.g. MQ-001, PR-4.2.4, FORM-DOC-001)';
+   312→COMMENT ON COLUMN documents.triggers IS 'JSON array of document codes that trigger/are triggered by this document';
+   313→COMMENT ON COLUMN documents.doc_type IS 'Document type — renamed from "type" to avoid PostgreSQL reserved word';
+   314→
+   315→
+   316→-- ============================================================================
+   317→-- TABLE 5: electronic_signatures
+   318→-- ============================================================================
+   319→
+   320→CREATE TABLE electronic_signatures (
+   321→  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   322→  document_id       uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+   323→  signed_by_id      uuid NOT NULL REFERENCES profiles(id),
+   324→  signer_name       text NOT NULL,
+   325→  signer_role       text NOT NULL,
+   326→  signature_type    signature_type NOT NULL,
+   327→  signature_hash    text NOT NULL,
+   328→  user_agent        text,
+   329→  revoked           boolean NOT NULL DEFAULT false,
+   330→  revocation_reason text,
+   331→  organization_id   uuid REFERENCES organizations(id),
+   332→  created_at        timestamptz NOT NULL DEFAULT now()
+   333→);
+   334→
+   335→COMMENT ON TABLE electronic_signatures IS '21 CFR Part 11 compliant electronic signatures — linked to documents, templates, and instances';
+   336→
+   337→
+   338→-- ============================================================================
+   339→-- TABLE 6: document_prerequisites
+   340→-- ============================================================================
+   341→
+   342→CREATE TABLE document_prerequisites (
+   343→  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   344→  organization_id   uuid REFERENCES organizations(id),
+   345→  record_type       prerequisite_record_type NOT NULL,
+   346→  required_doc_type text NOT NULL,
+   347→  required_doc_ref  text,
+   348→  is_mandatory      boolean NOT NULL DEFAULT true,
+   349→  description       text,
+   350→  created_at        timestamptz NOT NULL DEFAULT now()
+   351→);
+   352→
+   353→COMMENT ON TABLE document_prerequisites IS 'Mandatory document prerequisites before record creation — ISO 13485 §4.2.3';
+   354→
+   355→
+   356→-- ============================================================================
+   357→-- TABLE 7: form_templates  (LAYER 1 — Template Approval)
+   358→-- ============================================================================
+   359→
+   360→CREATE TABLE form_templates (
+   361→  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   362→  document_id           text,
+   363→  title                 text NOT NULL,
+   364→  version               text NOT NULL DEFAULT '1.0',
+   365→  description           text,
+   366→  fields                jsonb NOT NULL DEFAULT '[]',
+   367→  is_active             boolean NOT NULL DEFAULT true,
+   368→  status                form_template_status NOT NULL DEFAULT 'Draft',
+   369→  module_type           form_template_module_type NOT NULL DEFAULT 'general',
+   370→  workflow              jsonb,
+   371→  compliance            jsonb,
+   372→  signatures            jsonb DEFAULT '[]',
+   373→  current_approval_step integer DEFAULT 0,
+   374→  previous_version_id   uuid REFERENCES form_templates(id),
+   375→  effective_date        timestamptz,
+   376→  review_comment        text,
+   377→  organization_id       uuid REFERENCES organizations(id),
+   378→  created_by_id         uuid REFERENCES profiles(id),
+   379→  created_at            timestamptz NOT NULL DEFAULT now(),
+   380→  updated_at            timestamptz NOT NULL DEFAULT now()
+   381→);
+   382→
+   383→COMMENT ON TABLE form_templates IS 'LAYER 1 — Form template approval lifecycle (ISO 13485 §4.2.3). Draft→Under_Review→Approved→Obsolete';
+   384→COMMENT ON COLUMN form_templates.status IS 'Template status governs whether instances can be created from it';
+   385→COMMENT ON COLUMN form_templates.module_type IS 'Which QMS module this template belongs to (connects to 10 record modules)';
+   386→COMMENT ON COLUMN form_templates.workflow IS 'JSON: FormTemplateWorkflow {requiresApproval, workflowType, approvers[], eSignatureRequired, etc.}';
+   387→COMMENT ON COLUMN form_templates.fields IS 'JSON array of FormFieldDefinition objects';
+   388→COMMENT ON COLUMN form_templates.compliance IS 'JSON: FormTemplateCompliance {regulatoryReference, retentionPeriod, cfrPart11Compliance, etc.}';
+   389→
+   390→
+   391→-- ============================================================================
+   392→-- TABLE 8: form_instances  (LAYER 2 — Execution)
+   393→-- ============================================================================
+   394→
+   395→CREATE TABLE form_instances (
+   396→  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   397→  template_id           uuid NOT NULL REFERENCES form_templates(id),
+   398→  template_version      text NOT NULL,
+   399→  reference_number      text NOT NULL,
+   400→  values                jsonb NOT NULL DEFAULT '{}',
+   401→  status                form_instance_status NOT NULL DEFAULT 'Draft',
+   402→  is_locked             boolean NOT NULL DEFAULT false,
+   403→  submitted_by_id       uuid REFERENCES profiles(id),
+   404→  submitted_at          timestamptz,
+   405→  signature_hash        text,
+   406→  signatures            jsonb DEFAULT '[]',
+   407→  current_approval_step integer DEFAULT 0,
+   408→  approval_history      jsonb DEFAULT '[]',
+   409→  parent_document_id    uuid REFERENCES documents(id),
+   410→  linked_record_id      text,
+   411→  linked_record_type    form_template_module_type,
+   412→  organization_id       uuid REFERENCES organizations(id),
+   413→  created_by_id         uuid REFERENCES profiles(id),
+   414→  created_at            timestamptz NOT NULL DEFAULT now(),
+   415→  updated_at            timestamptz NOT NULL DEFAULT now()
+   416→);
+   417→
+   418→COMMENT ON TABLE form_instances IS 'LAYER 2 — Form instance execution (ISO 13485 §4.2.4). Draft→Submitted→Approved/Rejected';
+   419→COMMENT ON COLUMN form_instances.linked_record_id IS 'FK-like reference to the QMS record (e.g. CAPA-001, NCR-001)';
+   420→COMMENT ON COLUMN form_instances.linked_record_type IS 'Which QMS module this instance belongs to';
+   421→COMMENT ON COLUMN form_instances.approval_history IS 'JSON array of InstanceApprovalEntry objects';
+   422→
+   423→
+   424→-- ============================================================================
+   425→-- TABLE 9: capas
+   426→-- ============================================================================
+   427→
+   428→CREATE TABLE capas (
+   429→  id                            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   430→  capa_number                   text NOT NULL,
+   431→  title                         text NOT NULL,
+   432→  capa_type                     capa_type NOT NULL,
+   433→  status                        capa_status NOT NULL DEFAULT 'Open',
+   434→  template_id                   uuid REFERENCES form_templates(id),
+   435→  template_version              text,
+   436→  priority                      capa_priority,
+   437→  source                        capa_source,
+   438→  source_reference_id           uuid,
+   439→  description                   text NOT NULL,
+   440→  problem_statement             text,
+   441→  investigation_details         text,
+   442→  root_cause_analysis           text,
+   443→  root_cause_category           root_cause_category,
+   444→  five_whys                     jsonb DEFAULT '[]',
+   445→  corrective_action             text,
+   446→  effectiveness_verification_method text,
+   447→  effectiveness_criteria        text,
+   448→  effectiveness_result          text CHECK (effectiveness_result IN ('Effective', 'Not Effective', 'Pending Review')),
+   449→  linked_document_id            uuid REFERENCES documents(id),
+   450→  linked_ncr_id                 uuid,
+   451→  linked_audit_id               uuid,
+   452→  assigned_to                   text NOT NULL,
+   453→  due_date                      timestamptz NOT NULL,
+   454→  created_date                  timestamptz NOT NULL,
+   455→  closed_date                   timestamptz,
+   456→  created_by_id                 uuid REFERENCES profiles(id),
+   457→  organization_id               uuid REFERENCES organizations(id),
+   458→  created_at                    timestamptz NOT NULL DEFAULT now(),
+   459→  updated_at                    timestamptz NOT NULL DEFAULT now()
+   460→);
+   461→
+   462→COMMENT ON TABLE capas IS 'CAPA records — Corrective and Preventive Actions (ISO 13485 §8.5.2/§8.5.3)';
+   463→COMMENT ON COLUMN capas.template_id IS 'FK to form_templates — Layer 1 connection. Only Approved templates can be used';
+   464→COMMENT ON COLUMN capas.template_version IS 'Snapshot of template version at record creation time';
+   465→COMMENT ON COLUMN capas.capa_type IS 'CAPA type — renamed from "type" to avoid PostgreSQL reserved word';
+   466→
+   467→
+   468→-- ============================================================================
+   469→-- TABLE 10: non_conformances
+   470→-- ============================================================================
+   471→
+   472→CREATE TABLE non_conformances (
+   473→  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   474→  ncr_number              text NOT NULL,
+   475→  title                   text NOT NULL,
+   476→  ncr_type                ncr_type NOT NULL,
+   477→  status                  ncr_status NOT NULL DEFAULT 'Open',
+   478→  template_id             uuid REFERENCES form_templates(id),
+   479→  template_version        text,
+   480→  severity                ncr_severity,
+   481→  source                  text,
+   482→  description             text NOT NULL,
+   483→  lot_number              text,
+   484→  quantity_affected       integer,
+   485→  disposition             ncr_disposition,
+   486→  linked_capa_id          uuid REFERENCES capas(id),
+   487→  linked_procedure_ref    text,
+   488→  supplier_id             uuid,
+   489→  is_oos_oot              boolean NOT NULL DEFAULT false,
+   490→  analytical_method       text,
+   491→  measured_value          numeric,
+   492→  measured_unit           text,
+   493→  spec_limit              text,
+   494→  phase1_conclusion       text CHECK (phase1_conclusion IN ('Error Found', 'No Error Found', 'Pending')),
+   495→  phase2_required         boolean NOT NULL DEFAULT false,
+   496→  phase2_conclusion       text CHECK (phase2_conclusion IN ('Confirmed OOS', 'Invalidated', 'Pending')),
+   497→  reject_lot              boolean NOT NULL DEFAULT false,
+   498→  impact_assessment       text,
+   499→  containment_actions     text,
+   500→  affected_product        text,
+   501→  assigned_to             text,
+   502→  due_date                timestamptz,
+   503→  created_date            timestamptz NOT NULL,
+   504→  created_by_id           uuid REFERENCES profiles(id),
+   505→  organization_id         uuid REFERENCES organizations(id),
+   506→  created_at              timestamptz NOT NULL DEFAULT now(),
+   507→  updated_at              timestamptz NOT NULL DEFAULT now()
+   508→);
+   509→
+   510→COMMENT ON TABLE non_conformances IS 'Non-Conformance Reports including OOS/OOT (ISO 13485 §8.3)';
+   511→COMMENT ON COLUMN non_conformances.ncr_type IS 'NCR type — renamed from "type" to avoid PostgreSQL reserved word';
+   512→
+   513→
+   514→-- ============================================================================
+   515→-- TABLE 11: deviations
+   516→-- ============================================================================
+   517→
+   518→CREATE TABLE deviations (
+   519→  id                          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   520→  dev_number                  text NOT NULL,
+   521→  title                       text NOT NULL,
+   522→  deviation_type              deviation_type NOT NULL,
+   523→  status                      deviation_status NOT NULL DEFAULT 'Open',
+   524→  template_id                 uuid REFERENCES form_templates(id),
+   525→  template_version            text,
+   526→  severity                    deviation_severity NOT NULL,
+   527→  category                    deviation_category NOT NULL,
+   528→  description                 text NOT NULL,
+   529→  deviation_details           text NOT NULL,
+   530→  justification               text,
+   531→  risk_assessment             text,
+   532→  corrective_action           text,
+   533→  preventive_action           text,
+   534→  sop_reference               text,
+   535→  expected_result             text,
+   536→  actual_result               text,
+   537→  product_stage               deviation_product_stage,
+   538→  quarantine                  boolean DEFAULT false,
+   539→  impact_on_validated_state   text,
+   540→  impact_on_regulatory_filing text,
+   541→  containment_action          text,
+   542→  detected_date               timestamptz,
+   543→  is_planned_deviation        boolean DEFAULT false,
+   544→  lot_number                  text,
+   545→  product_code                text,
+   546→  quantity_affected           integer,
+   547→  linked_capa_id              uuid REFERENCES capas(id),
+   548→  linked_document_id          uuid REFERENCES documents(id),
+   549→  assigned_to                 text NOT NULL,
+   550→  due_date                    timestamptz NOT NULL,
+   551→  closed_date                 timestamptz,
+   552→  created_by_id               uuid REFERENCES profiles(id),
+   553→  organization_id             uuid REFERENCES organizations(id),
+   554→  created_at                  timestamptz NOT NULL DEFAULT now(),
+   555→  updated_at                  timestamptz NOT NULL DEFAULT now()
+   556→);
+   557→
+   558→COMMENT ON TABLE deviations IS 'Deviation records — Planned and Unplanned deviations (ISO 13485 §8.3)';
+   559→
+   560→
+   561→-- ============================================================================
+   562→-- TABLE 12: change_controls
+   563→-- ============================================================================
+   564→
+   565→CREATE TABLE change_controls (
+   566→  id                              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+   567→  cc_number                       text NOT NULL,
+   568→  title                           text NOT NULL,
+   569→  cc_type                         cc_type NOT NULL,
+   570→  status                          cc_status NOT NULL DEFAULT 'Requested',
+   571→  template_id                     uuid REFERENCES form_templates(id),
+   572→  template_version                text,
+   573→  priority                        cc_priority NOT NULL,
+   574→  category                        cc_category NOT NULL,
+   575→  description                     text NOT NULL,
+   576→  justification                   text NOT NULL,
+   577→  proposed_change                 text NOT NULL,
+   578→  detailed_change_description     text,
+   579→  business_compliance_justification text,
+   580→  risk_assessment                 text,
+   581→  impact_analysis                 text,
+   582→  affected_areas                  text,
+   583→  impact_on_validated_systems     boolean DEFAULT false,
+   584→  implementation_plan             text,
+   585→  implementation_date             timestamptz,
+   586→  estimated_cost_impact           text,
+   587→  completion_date                 timestamptz,
+   588→  regulatory_trigger              text,
+   589→  emergency_flag                  boolean DEFAULT false,
+   590→  linked_document_id              uuid REFERENCES documents(id),
+   591→  linked_capa_id                  uuid REFERENCES capas(id),
+   592→  additional_references           text,
+   593→  assigned_to                     text NOT NULL,
+   594→  requested_by                    text NOT NULL,
+   595→  approved_by                     text,
+   596→  approver                        text,
+   597→  due_date                        timestamptz NOT NULL,
+   598→  created_by_id                   uuid REFERENCES profiles(id),
+   599→  organization_id                 uuid REFERENCES organizations(id),
+   600→  created_at                      timestamptz NOT NULL DEFAULT now(),
+
+[showing lines 1-600 of 1256; use offset=601 with limit to continue reading]

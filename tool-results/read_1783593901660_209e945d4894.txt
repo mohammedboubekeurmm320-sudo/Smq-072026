@@ -1,0 +1,1195 @@
+     1→// QMS Types - Complete type definitions for the Quality Management System
+     2→
+     3→// ============================================================================
+     4→// User Roles & Permissions
+     5→// ============================================================================
+     6→
+     7→export type UserRole = 'admin' | 'quality_manager' | 'auditor' | 'document_controller' | 'executive' | 'operator';
+     8→
+     9→export type Permission =
+    10→  | 'documents.create' | 'documents.read' | 'documents.update' | 'documents.delete' | 'documents.approve'
+    11→  | 'capa.create' | 'capa.read' | 'capa.update' | 'capa.delete' | 'capa.approve'
+    12→  | 'ncr.create' | 'ncr.read' | 'ncr.update' | 'ncr.delete' | 'ncr.approve'
+    13→  | 'deviation.create' | 'deviation.read' | 'deviation.update' | 'deviation.delete' | 'deviation.approve'
+    14→  | 'changecontrol.create' | 'changecontrol.read' | 'changecontrol.update' | 'changecontrol.delete' | 'changecontrol.approve'
+    15→  | 'audit.create' | 'audit.read' | 'audit.update' | 'audit.delete'
+    16→  | 'training.create' | 'training.read' | 'training.update' | 'training.delete'
+    17→  | 'risk.create' | 'risk.read' | 'risk.update' | 'risk.delete'
+    18→  | 'batch.create' | 'batch.read' | 'batch.update' | 'batch.delete' | 'batch.release'
+    19→  | 'supplier.create' | 'supplier.read' | 'supplier.update' | 'supplier.delete'
+    20→  | 'recordtypes.create' | 'recordtypes.read' | 'recordtypes.update' | 'recordtypes.delete'
+    21→  | 'reports.view' | 'reports.export'
+    22→  | 'compliance.view' | 'compliance.manage'
+    23→  | 'admin.users' | 'admin.settings' | 'admin.audit_trail';
+    24→
+    25→export const rolePermissions: Record<UserRole, Permission[]> = {
+    26→  admin: [
+    27→    'documents.create', 'documents.read', 'documents.update', 'documents.delete', 'documents.approve',
+    28→    'capa.create', 'capa.read', 'capa.update', 'capa.delete', 'capa.approve',
+    29→    'ncr.create', 'ncr.read', 'ncr.update', 'ncr.delete', 'ncr.approve',
+    30→    'deviation.create', 'deviation.read', 'deviation.update', 'deviation.delete', 'deviation.approve',
+    31→    'changecontrol.create', 'changecontrol.read', 'changecontrol.update', 'changecontrol.delete', 'changecontrol.approve',
+    32→    'audit.create', 'audit.read', 'audit.update', 'audit.delete',
+    33→    'training.create', 'training.read', 'training.update', 'training.delete',
+    34→    'risk.create', 'risk.read', 'risk.update', 'risk.delete',
+    35→    'batch.create', 'batch.read', 'batch.update', 'batch.delete', 'batch.release',
+    36→    'supplier.create', 'supplier.read', 'supplier.update', 'supplier.delete',
+    37→    'reports.view', 'reports.export',
+    38→    'compliance.view', 'compliance.manage',
+    39→    'admin.users', 'admin.settings', 'admin.audit_trail',
+    40→  ],
+    41→  quality_manager: [
+    42→    'documents.create', 'documents.read', 'documents.update', 'documents.approve',
+    43→    'capa.create', 'capa.read', 'capa.update', 'capa.approve',
+    44→    'ncr.create', 'ncr.read', 'ncr.update', 'ncr.approve',
+    45→    'deviation.create', 'deviation.read', 'deviation.update', 'deviation.approve',
+    46→    'changecontrol.create', 'changecontrol.read', 'changecontrol.update', 'changecontrol.approve',
+    47→    'audit.create', 'audit.read', 'audit.update',
+    48→    'training.create', 'training.read', 'training.update',
+    49→    'risk.create', 'risk.read', 'risk.update',
+    50→    'batch.create', 'batch.read', 'batch.update', 'batch.release',
+    51→    'supplier.create', 'supplier.read', 'supplier.update',
+    52→    'reports.view', 'reports.export',
+    53→    'compliance.view', 'compliance.manage',
+    54→    'admin.audit_trail',
+    55→  ],
+    56→  auditor: [
+    57→    'documents.read',
+    58→    'capa.read',
+    59→    'ncr.read',
+    60→    'deviation.read',
+    61→    'changecontrol.read',
+    62→    'audit.create', 'audit.read', 'audit.update',
+    63→    'training.read',
+    64→    'risk.read',
+    65→    'batch.read',
+    66→    'supplier.read',
+    67→    'reports.view',
+    68→    'compliance.view',
+    69→    'admin.audit_trail',
+    70→  ],
+    71→  document_controller: [
+    72→    'documents.create', 'documents.read', 'documents.update', 'documents.delete', 'documents.approve',
+    73→    'capa.read',
+    74→    'ncr.read',
+    75→    'deviation.read',
+    76→    'changecontrol.create', 'changecontrol.read', 'changecontrol.update',
+    77→    'audit.read',
+    78→    'training.create', 'training.read', 'training.update',
+    79→    'batch.read',
+    80→    'supplier.read',
+    81→    'reports.view',
+    82→    'compliance.view',
+    83→  ],
+    84→  executive: [
+    85→    'documents.read',
+    86→    'capa.read',
+    87→    'ncr.read',
+    88→    'deviation.read',
+    89→    'changecontrol.read',
+    90→    'audit.read',
+    91→    'training.read',
+    92→    'risk.read',
+    93→    'batch.read',
+    94→    'supplier.read',
+    95→    'reports.view', 'reports.export',
+    96→    'compliance.view',
+    97→  ],
+    98→  operator: [
+    99→    'documents.read',
+   100→    'capa.read',
+   101→    'ncr.create', 'ncr.read',
+   102→    'deviation.create', 'deviation.read',
+   103→    'batch.create', 'batch.read', 'batch.update',
+   104→    'training.read',
+   105→    'supplier.read',
+   106→  ],
+   107→};
+   108→
+   109→// ============================================================================
+   110→// Organization & Settings
+   111→// ============================================================================
+   112→
+   113→export type IndustryType = 'medical_device' | 'pharmaceutical' | 'biotech' | 'ivd' | 'combination_product';
+   114→
+   115→export const CORE_MODULES = ['documents', 'capa', 'ncr', 'audits', 'training', 'reports', 'compliance'] as const;
+   116→export const OPTIONAL_MODULES = ['risks', 'hierarchy', 'batch_records', 'suppliers', 'forms', 'change_control', 'deviations', 'oos_oot'] as const;
+   117→
+   118→export const STANDARDS_BY_INDUSTRY: Record<IndustryType, string[]> = {
+   119→  medical_device: ['ISO 13485:2016', 'ISO 14971:2019', 'IEC 62304', 'FDA 21 CFR 820', 'MDR EU 2017/745'],
+   120→  pharmaceutical: ['ICH Q10', 'FDA 21 CFR 210/211', 'cGMP', 'EU GMP Annex 15', 'ISO 13485:2016'],
+   121→  biotech: ['ICH Q10', 'FDA 21 CFR 210/211', 'cGMP', 'ISO 14971:2019', 'ISO 13485:2016'],
+   122→  ivd: ['IVDR EU 2017/746', 'ISO 13485:2016', 'ISO 14971:2019', 'FDA 21 CFR 820', 'CLSI Guidelines'],
+   123→  combination_product: ['ISO 13485:2016', 'ISO 14971:2019', 'FDA 21 CFR 820', 'FDA 21 CFR 210/211', 'MDR EU 2017/745'],
+   124→};
+   125→
+   126→// ============================================================================
+   127→// Industry Configuration
+   128→// ============================================================================
+   129→
+   130→export interface IndustryConfig {
+   131→  label: string;
+   132→  primaryStandard: string;
+   133→  recommendedModules: string[];
+   134→  complianceWeights: {
+   135→    documents: number;
+   136→    capas: number;
+   137→    training: number;
+   138→    audits: number;
+   139→    ncrs: number;
+   140→    risks: number;
+   141→    batchRecords: number;
+   142→    suppliers: number;
+   143→  };
+   144→  checklistId: string;
+   145→  terminology: Record<string, string>;
+   146→}
+   147→
+   148→export const INDUSTRY_CONFIG: Record<IndustryType, IndustryConfig> = {
+   149→  medical_device: {
+   150→    label: 'Medical Device',
+   151→    primaryStandard: 'ISO 13485:2016',
+   152→    recommendedModules: ['risks', 'hierarchy', 'suppliers', 'forms'],
+   153→    complianceWeights: { documents: 0.25, capas: 0.20, training: 0.15, audits: 0.15, ncrs: 0.10, risks: 0.10, batchRecords: 0.03, suppliers: 0.02 },
+   154→    checklistId: 'iso13485',
+   155→    terminology: { batchRecord: 'Production Record', deviation: 'Nonconformity' },
+   156→  },
+   157→  pharmaceutical: {
+   158→    label: 'Pharmaceutical',
+   159→    primaryStandard: 'ICH Q10',
+   160→    recommendedModules: ['risks', 'batch_records', 'suppliers', 'forms', 'oos_oot', 'deviations', 'change_control'],
+   161→    complianceWeights: { documents: 0.20, capas: 0.20, training: 0.10, audits: 0.10, ncrs: 0.10, risks: 0.05, batchRecords: 0.15, suppliers: 0.10 },
+   162→    checklistId: 'ichq10',
+   163→    terminology: { batchRecord: 'Batch Record', deviation: 'Deviation' },
+   164→  },
+   165→  biotech: {
+   166→    label: 'Biotech',
+   167→    primaryStandard: 'ICH Q10',
+   168→    recommendedModules: ['risks', 'batch_records', 'suppliers', 'forms', 'oos_oot', 'deviations', 'change_control'],
+   169→    complianceWeights: { documents: 0.20, capas: 0.20, training: 0.10, audits: 0.10, ncrs: 0.10, risks: 0.10, batchRecords: 0.10, suppliers: 0.10 },
+   170→    checklistId: 'ichq10',
+   171→    terminology: { batchRecord: 'Batch Record', deviation: 'Deviation' },
+   172→  },
+   173→  ivd: {
+   174→    label: 'IVD',
+   175→    primaryStandard: 'IVDR EU 2017/746',
+   176→    recommendedModules: ['risks', 'hierarchy', 'suppliers', 'forms'],
+   177→    complianceWeights: { documents: 0.25, capas: 0.20, training: 0.15, audits: 0.15, ncrs: 0.10, risks: 0.10, batchRecords: 0.03, suppliers: 0.02 },
+   178→    checklistId: 'ivdr',
+   179→    terminology: { batchRecord: 'Production Record', deviation: 'Nonconformity' },
+   180→  },
+   181→  combination_product: {
+   182→    label: 'Combination Product',
+   183→    primaryStandard: 'ISO 13485:2016',
+   184→    recommendedModules: ['risks', 'hierarchy', 'batch_records', 'suppliers', 'forms', 'oos_oot', 'deviations', 'change_control'],
+   185→    complianceWeights: { documents: 0.22, capas: 0.18, training: 0.12, audits: 0.12, ncrs: 0.10, risks: 0.10, batchRecords: 0.10, suppliers: 0.06 },
+   186→    checklistId: 'iso13485',
+   187→    terminology: { batchRecord: 'Batch Record', deviation: 'Deviation' },
+   188→  },
+   189→};
+   190→
+   191→export interface OrgSettings {
+   192→  setup_completed: boolean;
+   193→  industry_type: IndustryType;
+   194→  applicable_standards: string[];
+   195→  active_modules: string[];
+   196→  company_name?: string;
+   197→  logo_url?: string;
+   198→  default_document_retention?: string;
+   199→  require_electronic_signatures?: boolean;
+   200→  require_prerequisite_docs?: boolean;
+   201→  audit_trail_enabled?: boolean;
+   202→  notification_settings?: {
+   203→    capa_overdue: boolean;
+   204→    ncr_overdue: boolean;
+   205→    document_expiry: boolean;
+   206→    training_overdue: boolean;
+   207→    audit_due: boolean;
+   208→  };
+   209→}
+   210→
+   211→// ============================================================================
+   212→// Document Types
+   213→// ============================================================================
+   214→
+   215→export type DocumentType =
+   216→  // Qwen-aligned types (French taxonomy)
+   217→  | 'MANUEL' | 'POLITIQUE' | 'INDICATEUR' | 'PROCESS_MAP' | 'ORGANIGRAMME'
+   218→  | 'REGLEMENTAIRE' | 'MAPPING'
+   219→  | 'PROCEDURE' | 'INSTRUCTION' | 'FORMULAIRE' | 'REGISTRE' | 'ENREGISTREMENT' | 'MASTER_BATCH'
+   220→  // Legacy English types (kept for backward compatibility)
+   221→  | 'SOP' | 'WI' | 'Form' | 'Policy' | 'Specification' | 'Technical'
+   222→  | 'Risk Analysis' | 'Validation Protocol' | 'Record' | 'Manual' | 'Instruction'
+   223→  | 'Register' | 'Master Batch' | 'Procedure' | 'Process Map' | 'Organigram';
+   224→export type DocumentStatus =
+   225→  | 'Draft' | 'Under Review' | 'Approved' | 'Effective' | 'Obsolete' | 'Withdrawn';
+   226→export type DocumentClassification = 'Internal' | 'External' | 'Regulatory' | 'Confidential';
+   227→export type DocumentLevel = 1 | 2 | 3 | 4;
+   228→
+   229→/** Qwen niveau labels for each document level */
+   230→export const DOCUMENT_LEVEL_LABELS: Record<DocumentLevel, { fr: string; en: string }> = {
+   231→  1: { fr: 'Stratégique', en: 'Strategic' },
+   232→  2: { fr: 'Transversal', en: 'Cross-Functional' },
+   233→  3: { fr: 'Métier / Technique', en: 'Operational / Technical' },
+   234→  4: { fr: 'Enregistrement / Formulaire', en: 'Record / Form' },
+   235→};
+   236→
+   237→export type ValidationPhase = 'IQ' | 'OQ' | 'PQ' | 'Full';
+   238→
+   239→export interface Document {
+   240→  id: string;
+   241→  documentNumber: string;
+   242→  title: string;
+   243→  type: DocumentType;
+   244→  version: string;
+   245→  status: DocumentStatus;
+   246→  effectiveDate?: string;
+   247→  expirationDate?: string;
+   248→  owner?: string;
+   249→  department?: string;
+   250→  lastReviewed?: string;
+   251→  nextReview?: string;
+   252→  description?: string;
+   253→  classification?: DocumentClassification;
+   254→  retentionPeriod?: string;
+   255→  scope?: string;
+   256→  references?: string;
+   257→  typeSpecificData?: Record<string, unknown>;
+   258→  parentDocumentId?: string;
+   259→  documentLevel?: DocumentLevel;
+   260→  validationPhase?: ValidationPhase;
+   261→  parentValidationId?: string;
+   262→  authorId?: string;
+   263→  organizationId?: string;
+   264→  createdById?: string;
+   265→  createdAt: string;
+   266→  updatedAt: string;
+   267→  signatures?: ElectronicSignature[];
+   268→  childDocuments?: Document[];
+   269→  author?: Profile;
+   270→  createdBy?: Profile;
+   271→  // --- P0: Qwen-aligned fields ---
+   272→  /** Structured document code (e.g. MQ-001, PR-4.2.4, FORM-DOC-001, WI-LAB-PCQ-001) */
+   273→  code?: string;
+   274→  /** ISO 13485 clause reference for traceability */
+   275→  isoClause?: string;
+   276→  /** Document triggers (declencheurs) — codes of documents that trigger or are triggered by this document */
+   277→  triggers?: string[];
+   278→  /** Child document codes (from Qwen enfants field) */
+   279→  childCodes?: string[];
+   280→  /** Whether this document is a prerequisite for other documents */
+   281→  isPrerequisite?: boolean;
+   282→  /** Review cycle in months */
+   283→  reviewCycleMonths?: number;
+   284→  /** Custom field values */
+   285→  customFields?: CustomFieldValue[];
+   286→  /** Whether this document is a template that other documents can reference for creation.
+   287→   *  Templates must be Approved/Effective before they can be used as references. */
+   288→  isTemplate?: boolean;
+   289→  /** ID of the approved template document this document was created from.
+   290→   *  Provides traceability from document back to its source template. */
+   291→  templateReferenceId?: string;
+   292→  /** Version of the template at the time this document was created from it. */
+   293→  templateReferenceVersion?: string;
+   294→}
+   295→
+   296→// ============================================================================
+   297→// Electronic Signature
+   298→// ============================================================================
+   299→
+   300→export type SignatureType = 'approval' | 'rejection' | 'review' | 'verification';
+   301→
+   302→export interface ElectronicSignature {
+   303→  id: string;
+   304→  documentId: string;
+   305→  signedById: string;
+   306→  signerName: string;
+   307→  signerRole: string;
+   308→  signatureType: SignatureType;
+   309→  signatureHash: string;
+   310→  userAgent?: string;
+   311→  revoked: boolean;
+   312→  revocationReason?: string;
+   313→  createdAt: string;
+   314→}
+   315→
+   316→// ============================================================================
+   317→// CAPA
+   318→// ============================================================================
+   319→
+   320→export type CapaType = 'Corrective' | 'Preventive';
+   321→export type CapaStatus = 'Open' | 'Investigation' | 'Implementation' | 'Effectiveness Check' | 'Closed';
+   322→export type CapaPriority = 'Critical' | 'High' | 'Medium' | 'Low';
+   323→export type CapaSource = 'Non-Conformance' | 'Audit Finding' | 'Customer Complaint' | 'Management Review' | 'Process Monitoring' | 'Supplier Issue';
+   324→export type RootCauseCategory = 'Man' | 'Machine' | 'Method' | 'Material' | 'Measurement' | 'Environment' | 'Management';
+   325→
+   326→export interface Capa {
+   327→  id: string;
+   328→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   329→  templateId?: string;
+   330→  templateVersion?: string;
+   331→  capaNumber: string;
+   332→  title: string;
+   333→  type: CapaType;
+   334→  status: CapaStatus;
+   335→  priority?: CapaPriority;
+   336→  source?: CapaSource;
+   337→  sourceReferenceId?: string;
+   338→  description: string;
+   339→  problemStatement?: string;
+   340→  investigationDetails?: string;
+   341→  rootCauseAnalysis?: string;
+   342→  rootCauseCategory?: RootCauseCategory;
+   343→  fiveWhys?: string[];
+   344→  correctiveAction?: string;
+   345→  effectivenessVerificationMethod?: string;
+   346→  effectivenessCriteria?: string;
+   347→  effectivenessResult?: 'Effective' | 'Not Effective' | 'Pending Review';
+   348→  linkedDocumentId?: string;
+   349→  linkedNcrId?: string;
+   350→  linkedAuditId?: string;
+   351→  /** Linked CAPA (for parent/child CAPA chains) — ISO 13485 §8.5.2 */
+   352→  linkedCapaId?: string;
+   353→  assignedTo: string;
+   354→  dueDate: string;
+   355→  createdDate: string;
+   356→  closedDate?: string;
+   357→  createdById?: string;
+   358→  organizationId?: string;
+   359→  createdAt: string;
+   360→  updatedAt: string;
+   361→}
+   362→
+   363→// ============================================================================
+   364→// Non-Conformance
+   365→// ============================================================================
+   366→
+   367→export type NcrType = 'Product' | 'Process' | 'System' | 'Supplier' | 'OOS' | 'OOT';
+   368→export type NcrStatus = 'Open' | 'Under Investigation' | 'Pending Disposition' | 'Closed';
+   369→export type NcrSeverity = 'Critical' | 'Major' | 'Minor';
+   370→export type NcrDisposition = 'Use As Is' | 'Rework' | 'Scrap' | 'Return to Supplier' | 'Concession' | 'Pending';
+   371→
+   372→export interface NonConformance {
+   373→  id: string;
+   374→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   375→  templateId?: string;
+   376→  templateVersion?: string;
+   377→  ncrNumber: string;
+   378→  title: string;
+   379→  type: NcrType;
+   380→  status: NcrStatus;
+   381→  severity?: NcrSeverity;
+   382→  source?: string;
+   383→  description: string;
+   384→  lotNumber?: string;
+   385→  quantityAffected?: number;
+   386→  disposition?: NcrDisposition;
+   387→  linkedCapaId?: string;
+   388→  linkedProcedureRef?: string;
+   389→  supplierId?: string;
+   390→  isOosOot: boolean;
+   391→  analyticalMethod?: string;
+   392→  measuredValue?: number;
+   393→  measuredUnit?: string;
+   394→  specLimit?: string;
+   395→  phase1Conclusion?: 'Assignable Cause Found' | 'No Assignable Cause Found' | 'Error Found' | 'No Error Found' | 'Pending';
+   396→  phase2Required: boolean;
+   397→  phase2Conclusion?: 'Confirmed OOS' | 'Invalidated' | 'Pending';
+   398→  rejectLot: boolean;
+   399→  impactAssessment?: string;
+   400→  containmentActions?: string;
+   401→  affectedProduct?: string;
+   402→  assignedTo?: string;
+   403→  dueDate?: string;
+   404→  createdDate: string;
+   405→  createdById?: string;
+   406→  organizationId?: string;
+   407→  createdAt: string;
+   408→  updatedAt: string;
+   409→  /** E-signature hash stored when NCR is closed */
+   410→  closedSignatureHash?: string;
+   411→  closedSignedAt?: string;
+   412→  closedById?: string;
+   413→  closedReason?: string;
+   414→}
+   415→
+   416→// ============================================================================
+   417→// Batch Record
+   418→// ============================================================================
+   419→
+   420→export type BatchStatus = 'In Progress' | 'Pending QA Review' | 'Released' | 'Rejected' | 'Quarantine';
+   421→export type BatchStepStatus = 'Pending' | 'In Progress' | 'Completed' | 'Failed';
+   422→export type StepType = 'Weighing' | 'Mixing' | 'Filtration' | 'Filling' | 'Inspection' | 'Labeling' | 'Packaging' | 'QC Testing' | 'Other';
+   423→export type RawMaterialStatus = 'Verified' | 'Pending' | 'Rejected';
+   424→
+   425→export interface BatchStep {
+   426→  id: string;
+   427→  batchRecordId: string;
+   428→  stepOrder: number;
+   429→  stepName: string;
+   430→  instructions?: string;
+   431→  expectedValue?: string;
+   432→  actualValue?: string;
+   433→  status: BatchStepStatus;
+   434→  stepType?: StepType;
+   435→  operatorId?: string;
+   436→  performedAt?: string;
+   437→  signatureHash?: string;
+   438→  createdAt: string;
+   439→}
+   440→
+   441→export interface RawMaterial {
+   442→  id: string;
+   443→  material: string;
+   444→  lotNumber: string;
+   445→  supplier: string;
+   446→  status: RawMaterialStatus;
+   447→}
+   448→
+   449→export interface BatchRecord {
+   450→  id: string;
+   451→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   452→  templateId?: string;
+   453→  templateVersion?: string;
+   454→  lotNumber: string;
+   455→  productName: string;
+   456→  productCode?: string;
+   457→  batchSize?: number;
+   458→  batchSizeUnit?: string;
+   459→  masterFormulaId?: string;
+   460→  sopReference?: string;
+   461→  manufacturingDate: string;
+   462→  expiryDate?: string;
+   463→  status: BatchStatus;
+   464→  isLocked: boolean;
+   465→  qaReleaseDate?: string;
+   466→  qaReleasedById?: string;
+   467→  organizationId?: string;
+   468→  createdById?: string;
+   469→  createdAt: string;
+   470→  steps?: BatchStep[];
+   471→  rawMaterials?: RawMaterial[];
+   472→}
+   473→
+   474→// ============================================================================
+   475→// Supplier
+   476→// ============================================================================
+   477→
+   478→export type SupplierCategory = 'Raw Material' | 'Packaging' | 'Equipment' | 'Service' | 'Contract Manufacturer' | 'Laboratory' | 'Other';
+   479→export type SupplierStatus = 'Qualified' | 'Conditional' | 'Disqualified' | 'Under Evaluation';
+   480→export type QualificationMethod = 'On-Site Audit' | 'Questionnaire' | 'Certificate Review' | 'Third-Party Assessment' | 'Historical Performance';
+   481→
+   482→export interface Supplier {
+   483→  id: string;
+   484→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   485→  templateId?: string;
+   486→  templateVersion?: string;
+   487→  supplierCode: string;
+   488→  name: string;
+   489→  category?: SupplierCategory;
+   490→  status: SupplierStatus;
+   491→  qualificationDate?: string;
+   492→  nextReviewDate?: string;
+   493→  certifications?: string[];
+   494→  performanceScore?: number;
+   495→  qualificationDocId?: string;
+   496→  website?: string;
+   497→  primaryContactName?: string;
+   498→  primaryContactEmail?: string;
+   499→  primaryContactPhone?: string;
+   500→  street?: string;
+   501→  city?: string;
+   502→  stateProvince?: string;
+   503→  postalCode?: string;
+   504→  country?: string;
+   505→  emergencyContactName?: string;
+   506→  emergencyContactPhone?: string;
+   507→  qualificationMethod?: QualificationMethod;
+   508→  qualificationDocRef?: string;
+   509→  organizationId?: string;
+   510→  createdById?: string;
+   511→  createdAt: string;
+   512→}
+   513→
+   514→// ============================================================================
+   515→// Form Template & Instance
+   516→// ============================================================================
+   517→
+   518→export interface FormFieldDefinition {
+   519→  id: string;
+   520→  name: string;
+   521→  label: string;
+   522→  type: 'text' | 'number' | 'date' | 'select' | 'checkbox' | 'textarea' | 'signature' | 'table' | 'rating' | 'file' | 'repeater';
+   523→  required?: boolean;
+   524→  options?: string[];
+   525→  placeholder?: string;
+   526→  defaultValue?: string;
+   527→  validation?: { min?: number; max?: number; pattern?: string };
+   528→}
+   529→
+   530→export interface FormTemplateWorkflow {
+   531→  requiresApproval: boolean;
+   532→  workflowType: 'single' | 'sequential' | 'parallel';
+   533→  allowDraftSaves: boolean;
+   534→  lockAfterSubmission: boolean;
+   535→  eSignatureRequired: boolean;
+   536→  /** Approvers chain for sequential/parallel workflows — agent-ctx/worklog.md (Layer 1) */
+   537→  approvers?: WorkflowApprover[];
+   538→}
+   539→
+   540→/** Approver entry in a form template workflow chain */
+   541→export interface WorkflowApprover {
+   542→  id: string;
+   543→  /** User ID of the approver (Profile.id) */
+   544→  userId: string;
+   545→  /** Display name of the approver (denormalized for history display) */
+   546→  userName?: string;
+   547→  role: UserRole;
+   548→  /** Order in the chain (1-based) for sequential workflows */
+   549→  order?: number;
+   550→  /** Whether this approver has signed (for instance-level tracking) */
+   551→  status?: 'pending' | 'approved' | 'rejected';
+   552→  comment?: string;
+   553→  signatureHash?: string;
+   554→  timestamp?: string;
+   555→}
+   556→
+   557→export interface FormTemplateCompliance {
+   558→  regulatoryReference: string;
+   559→  retentionPeriod: string;
+   560→  dataClassification: 'Internal' | 'Confidential' | 'Regulatory' | 'GxP Critical';
+   561→  auditTrailEnabled: boolean;
+   562→  printFriendlyLayout: boolean;
+   563→  cfrPart11Compliance: boolean;
+   564→}
+   565→
+   566→export type FormTemplateStatus = 'Draft' | 'Under_Review' | 'Approved' | 'Obsolete';
+   567→
+   568→export type FormTemplateModuleType = 'capa' | 'ncr' | 'deviation' | 'change_control' | 'audit' | 'risk' | 'training' | 'supplier' | 'batch_record' | 'oos_oot' | 'general';
+   569→
+   570→/** @deprecated Use FormTemplateModuleType instead */
+   571→export type FormTemplateModule = FormTemplateModuleType;
+   572→
+   573→export interface FormTemplate {
+   574→  id: string;
+   575→  documentId: string;
+   576→  title: string;
+   577→  version: string;
+   578→  description?: string;
+   579→  fields: FormFieldDefinition[];
+   580→  isActive: boolean;
+   581→  status?: FormTemplateStatus;
+   582→  moduleType?: FormTemplateModuleType;
+   583→  workflow?: FormTemplateWorkflow;
+   584→  compliance?: FormTemplateCompliance;
+   585→  organizationId?: string;
+   586→  createdById?: string;
+   587→  createdAt: string;
+   588→  updatedAt?: string;
+   589→  effectiveDate?: string;
+   590→  reviewComment?: string;
+   591→  signatures?: ElectronicSignature[];
+   592→  instances?: FormInstance[];
+   593→  /** SQL: current_approval_step — for sequential workflow tracking */
+   594→  currentApprovalStep?: number;
+   595→  /** SQL: previous_version_id — template version chaining */
+   596→  previousVersionId?: string;
+   597→}
+   598→
+   599→/** Allowed status transitions for form templates (state machine) */
+   600→export const FORM_TEMPLATE_TRANSITIONS: Record<FormTemplateStatus, FormTemplateStatus[]> = {
+   601→  Draft: ['Under_Review'],
+   602→  Under_Review: ['Approved', 'Draft'],
+   603→  Approved: ['Obsolete', 'Draft'],
+   604→  Obsolete: [],
+   605→};
+   606→
+   607→/** Role-based access control for template status transitions */
+   608→export const FORM_TEMPLATE_TRANSITION_ROLES: Record<string, UserRole[]> = {
+   609→  'Draft→Under_Review': ['admin', 'quality_manager', 'document_controller'],
+   610→  'Under_Review→Approved': ['admin', 'quality_manager'],
+   611→  'Under_Review→Draft': ['admin', 'quality_manager', 'document_controller'],
+   612→  'Approved→Obsolete': ['admin', 'quality_manager'],
+   613→  'Approved→Draft': ['admin', 'quality_manager'],
+   614→};
+   615→
+   616→export type FormInstanceStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected';
+   617→
+   618→export interface FormInstanceApprovalEntry {
+   619→  id: string;
+   620→  action: 'approved' | 'rejected' | 'returned';
+   621→  approverName: string;
+   622→  approverId: string;
+   623→  timestamp: string;
+   624→  comment?: string;
+   625→  signatureHash?: string;
+   626→}
+   627→
+   628→export interface FormInstance {
+   629→  id: string;
+   630→  templateId: string;
+   631→  templateVersion: string;
+   632→  referenceNumber: string;
+   633→  values: Record<string, unknown>;
+   634→  status: FormInstanceStatus;
+   635→  isLocked: boolean;
+   636→  submittedById?: string;
+   637→  submittedAt?: string;
+   638→  signatureHash?: string;
+   639→  parentDocumentId?: string;
+   640→  /** Slug of the record type this instance belongs to — used by /api/records/[type] */
+   641→  recordTypeSlug?: string;
+   642→  /** ID of the linked module record (CAPA, NCR, etc.) — ISO 13485 §7.5.9 */
+   643→  linkedRecordId?: string;
+   644→  /** Slug of the linked module record type */
+   645→  linkedRecordType?: string;
+   646→  organizationId?: string;
+   647→  createdById?: string;
+   648→  createdAt: string;
+   649→  updatedAt?: string;
+   650→  /** Current step in a sequential/parallel approval chain — 1-based, 0 = not started */
+   651→  currentApprovalStep?: number;
+   652→  signatures?: ElectronicSignature[];
+   653→  approvalHistory?: FormInstanceApprovalEntry[];
+   654→}
+   655→
+   656→// ============================================================================
+   657→// Audit Trail
+   658→// ============================================================================
+   659→
+   660→export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT' | 'SIGN' | 'LOGIN' | 'EXPORT';
+   661→
+   662→export interface AuditTrail {
+   663→  id: string;
+   664→  action: AuditAction;
+   665→  tableName: string;
+   666→  recordId?: string;
+   667→  userId?: string;
+   668→  userEmail?: string;
+   669→  oldValues?: Record<string, unknown>;
+   670→  newValues?: Record<string, unknown>;
+   671→  ipAddress?: string;
+   672→  userAgent?: string;
+   673→  organizationId?: string;
+   674→  createdAt: string;
+   675→}
+   676→
+   677→// ============================================================================
+   678→// Document Prerequisite
+   679→// ============================================================================
+   680→
+   681→export type PrerequisiteRecordType = 'CAPA' | 'NCR' | 'TRAINING' | 'RISK' | 'AUDIT' | 'CHANGE_CONTROL' | 'DEVIATION';
+   682→
+   683→export interface DocumentPrerequisite {
+   684→  id: string;
+   685→  organizationId?: string;
+   686→  recordType: PrerequisiteRecordType;
+   687→  requiredDocType: string;
+   688→  requiredDocRef?: string;
+   689→  isMandatory: boolean;
+   690→  description?: string;
+   691→  createdAt: string;
+   692→}
+   693→
+   694→// ============================================================================
+   695→// Profile
+   696→// ============================================================================
+   697→
+   698→export interface Profile {
+   699→  id: string;
+   700→  email: string;
+   701→  fullName?: string;
+   702→  role: UserRole;
+   703→  department?: string;
+   704→  jobTitle?: string;
+   705→  phone?: string;
+   706→  avatarUrl?: string;
+   707→  organizationId?: string;
+   708→  createdAt: string;
+   709→  updatedAt: string;
+   710→}
+   711→
+   712→// ============================================================================
+   713→// Organization
+   714→// ============================================================================
+   715→
+   716→export interface Organization {
+   717→  id: string;
+   718→  name: string;
+   719→  slug: string;
+   720→  subscriptionStatus: 'trial' | 'active' | 'suspended' | 'cancelled';
+   721→  settings: string; // JSON string of OrgSettings
+   722→  createdAt: string;
+   723→  updatedAt: string;
+   724→}
+   725→
+   726→export interface OrganizationMember {
+   727→  id: string;
+   728→  organizationId: string;
+   729→  userId: string;
+   730→  role: 'owner' | 'admin' | 'member' | 'viewer';
+   731→  status: 'active' | 'inactive' | 'pending';
+   732→  invitedBy?: string;
+   733→  createdAt: string;
+   734→}
+   735→
+   736→// ============================================================================
+   737→// Audit
+   738→// ============================================================================
+   739→
+   740→export type AuditType = 'Internal' | 'External' | 'Supplier';
+   741→export type AuditStatus = 'Planned' | 'In Progress' | 'Completed';
+   742→
+   743→export interface AuditFinding {
+   744→  id: string;
+   745→  description: string;
+   746→  severity: 'Critical' | 'Major' | 'Minor' | 'Observation';
+   747→  referenceClause?: string;
+   748→  correctiveActionRequired: boolean;
+   749→  capaId?: string;
+   750→}
+   751→
+   752→export interface Audit {
+   753→  id: string;
+   754→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   755→  templateId?: string;
+   756→  templateVersion?: string;
+   757→  auditNumber: string;
+   758→  title: string;
+   759→  type: AuditType;
+   760→  status: AuditStatus;
+   761→  scope?: string;
+   762→  scheduledDate: string;
+   763→  completedDate?: string;
+   764→  /** E-signature stored when audit is completed */
+   765→  completedSignatureHash?: string;
+   766→  completedSignedAt?: string;
+   767→  completedSignedById?: string;
+   768→  leadAuditor: string;
+   769→  auditees?: string[];
+   770→  findings?: AuditFinding[];
+   771→  organizationId?: string;
+   772→  createdAt: string;
+   773→  updatedAt: string;
+   774→}
+   775→
+   776→// ============================================================================
+   777→// Training
+   778→// ============================================================================
+   779→
+   780→export type TrainingType = 'Onboarding' | 'SOP' | 'Regulatory' | 'Skill' | 'Certification';
+   781→export type TrainingStatus = 'Planned' | 'In Progress' | 'Completed' | 'Overdue';
+   782→
+   783→export interface Training {
+   784→  id: string;
+   785→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   786→  templateId?: string;
+   787→  templateVersion?: string;
+   788→  title: string;
+   789→  description?: string;
+   790→  type: TrainingType;
+   791→  status: TrainingStatus;
+   792→  assignedTo: string;
+   793→  dueDate: string;
+   794→  completedDate?: string;
+   795→  documentId?: string;
+   796→  organizationId?: string;
+   797→  createdAt: string;
+   798→  updatedAt: string;
+   799→}
+   800→
+   801→// ============================================================================
+   802→// Risk
+   803→// ============================================================================
+   804→
+   805→export type RiskCategory = 'Product' | 'Process' | 'System' | 'Supplier';
+   806→export type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+   807→export type RiskStatus = 'Open' | 'Mitigated' | 'Accepted' | 'Closed';
+   808→
+   809→export interface Risk {
+   810→  id: string;
+   811→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   812→  templateId?: string;
+   813→  templateVersion?: string;
+   814→  riskNumber: string;
+   815→  title: string;
+   816→  category?: RiskCategory;
+   817→  /** Description of the hazard — ISO 14971 §5.4 */
+   818→  hazardDescription?: string;
+   819→  /** Person responsible for the risk — ISO 14971 §5.5 */
+   820→  riskOwner?: string;
+   821→  /** Regulatory clause reference (e.g., 'ISO 14971 §5.5') */
+   822→  regulatoryReference?: string;
+   823→  /** Type of risk control — ISO 14971 §6.2 (e.g., 'inherent_safe_design', 'protective_measures', 'information_for_safety') */
+   824→  controlType?: string;
+   825→  /** Method used to verify risk control effectiveness — ISO 14971 §8 */
+   826→  verificationMethod?: string;
+   827→  /** Acceptability decision (e.g., 'acceptable', 'ALARP', 'unacceptable') */
+   828→  riskAcceptability?: string;
+   829→  /** Notes on risk priority and justification */
+   830→  priorityNotes?: string;
+   831→  probability: number; // 1-5
+   832→  impact: number; // 1-5
+   833→  detectability: number; // 1-5
+   834→  rpn: number; // probability * impact * detectability
+   835→  riskLevel: RiskLevel;
+   836→  mitigation?: string;
+   837→  residualRisk?: string;
+   838→  /** Residual risk factors after mitigation — ISO 14971 §6.3 */
+   839→  residualProbability?: number;
+   840→  residualImpact?: number;
+   841→  residualDetectability?: number;
+   842→  residualRpn?: number;
+   843→  /** Linked document (e.g., risk assessment form) — ISO 13485 §4.2.4 */
+   844→  linkedDocumentId?: string;
+   845→  /** Linked CAPA (for risk mitigation action) — ISO 13485 §8.5.2 */
+   846→  linkedCapaId?: string;
+   847→  status: RiskStatus;
+   848→  organizationId?: string;
+   849→  createdAt: string;
+   850→  updatedAt: string;
+   851→}
+   852→
+   853→// ============================================================================
+   854→// Navigation
+   855→// ============================================================================
+   856→
+   857→export interface NavItem {
+   858→  id: string;
+   859→  label: string;
+   860→  icon: string;
+   861→  module?: string;
+   862→  badge?: number;
+   863→  children?: NavItem[];
+   864→}
+   865→
+   866→// ============================================================================
+   867→// Change Control
+   868→// ============================================================================
+   869→
+   870→export type ChangeControlType = 'Planned' | 'Unplanned' | 'Emergency';
+   871→export type ChangeControlStatus = 'Requested' | 'Under Review' | 'Approved' | 'In Implementation' | 'Completed' | 'Rejected';
+   872→export type ChangeControlPriority = 'Critical' | 'High' | 'Medium' | 'Low';
+   873→export type ChangeControlCategory = 'Process' | 'Equipment' | 'Facility' | 'Document' | 'Material' | 'Computer System' | 'Organizational' | 'Manufacturing' | 'Regulatory' | 'Supply Chain' | 'Warehouse' | 'Other';
+   874→
+   875→export interface ChangeControl {
+   876→  id: string;
+   877→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   878→  templateId?: string;
+   879→  templateVersion?: string;
+   880→  ccNumber: string;
+   881→  title: string;
+   882→  type: ChangeControlType;
+   883→  status: ChangeControlStatus;
+   884→  priority: ChangeControlPriority;
+   885→  category: ChangeControlCategory;
+   886→  description: string;
+   887→  justification: string;
+   888→  proposedChange: string;
+   889→  detailedChangeDescription?: string;
+   890→  businessComplianceJustification?: string;
+   891→  riskAssessment?: string;
+   892→  impactAnalysis?: string;
+   893→  affectedAreas?: string;
+   894→  impactOnValidatedSystems?: boolean;
+   895→  implementationPlan?: string;
+   896→  implementationDate?: string;
+   897→  estimatedCostImpact?: string;
+   898→  completionDate?: string;
+   899→  regulatoryTrigger?: string;
+   900→  emergencyFlag?: boolean;
+   901→  linkedDocumentId?: string;
+   902→  linkedCapaId?: string;
+   903→  additionalReferences?: string;
+   904→  assignedTo: string;
+   905→  requestedBy: string;
+   906→  approvedBy?: string;
+   907→  approver?: string;
+   908→  dueDate: string;
+   909→  createdById?: string;
+   910→  organizationId?: string;
+   911→  createdAt: string;
+   912→  updatedAt: string;
+   913→}
+   914→
+   915→// ============================================================================
+   916→// Deviation
+   917→// ============================================================================
+   918→
+   919→export type DeviationType = 'Planned' | 'Unplanned';
+   920→export type DeviationStatus = 'Open' | 'Under Investigation' | 'Pending QA Review' | 'Approved' | 'Closed';
+   921→export type DeviationSeverity = 'Critical' | 'Major' | 'Minor';
+   922→export type DeviationCategory = 'Process' | 'Equipment' | 'Material' | 'Environment' | 'Personnel' | 'Documentation';
+   923→
+   924→export type DeviationProductStage = 'Raw Material' | 'In-Process' | 'Finished Product' | 'Stability' | 'Other';
+   925→
+   926→export interface Deviation {
+   927→  id: string;
+   928→  /** Form template reference — ISO 13485 §4.2.4 (record must be created from an approved template) */
+   929→  templateId?: string;
+   930→  templateVersion?: string;
+   931→  devNumber: string;
+   932→  title: string;
+   933→  type: DeviationType;
+   934→  status: DeviationStatus;
+   935→  severity: DeviationSeverity;
+   936→  category: DeviationCategory;
+   937→  description: string;
+   938→  deviationDetails: string;
+   939→  justification?: string;
+   940→  riskAssessment?: string;
+   941→  correctiveAction?: string;
+   942→  preventiveAction?: string;
+   943→  sopReference?: string;
+   944→  expectedResult?: string;
+   945→  actualResult?: string;
+   946→  productStage?: DeviationProductStage;
+   947→  quarantine?: boolean;
+   948→  impactOnValidatedState?: string;
+   949→  impactOnRegulatoryFiling?: string;
+   950→  containmentAction?: string;
+   951→  detectedDate?: string;
+   952→  isPlannedDeviation?: boolean;
+   953→  lotNumber?: string;
+   954→  productCode?: string;
+   955→  quantityAffected?: number;
+   956→  linkedCapaId?: string;
+   957→  linkedDocumentId?: string;
+   958→  assignedTo: string;
+   959→  dueDate: string;
+   960→  closedDate?: string;
+   961→  createdById?: string;
+   962→  organizationId?: string;
+   963→  createdAt: string;
+   964→  updatedAt: string;
+   965→}
+   966→
+   967→// ============================================================================
+   968→// Scheduled Report
+   969→// ============================================================================
+   970→
+   971→export type ReportFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly';
+   972→export type ReportType = 'management-review' | 'capa-summary' | 'audit-summary' | 'compliance-overview' | 'training-status' | 'risk-profile';
+   973→export type ReportFormat = 'csv' | 'html' | 'pdf';
+   974→export type ScheduledReportStatus = 'active' | 'paused' | 'completed' | 'error';
+   975→
+   976→export interface ScheduledReport {
+   977→  id: string;
+   978→  name: string;
+   979→  reportType: ReportType;
+   980→  format: ReportFormat;
+   981→  frequency: ReportFrequency;
+   982→  status: ScheduledReportStatus;
+   983→  recipients: string[]; // email addresses
+   984→  filters?: Record<string, string>; // e.g., { department: 'Quality', priority: 'Critical' }
+   985→  lastRunAt?: string;
+   986→  nextRunAt: string;
+   987→  lastResult?: { success: boolean; recordCount: number; error?: string };
+   988→  organizationId?: string;
+   989→  createdById?: string;
+   990→  createdAt: string;
+   991→  updatedAt: string;
+   992→}
+   993→
+   994→// ============================================================================
+   995→// Navigation
+   996→// ============================================================================
+   997→
+   998→export type ActiveSection =
+   999→  | 'dashboard'
+  1000→  | 'documents' | 'document-hierarchy'
+  1001→  | 'ncr' | 'capa' | 'audits' | 'risks' | 'training' | 'change-control' | 'deviations' | 'batch-records' | 'suppliers' | 'oos-oot' | 'forms'
+  1002→  | 'reports' | 'compliance' | 'scheduled-reports'
+  1003→  | 'user-management' | 'settings';
+  1004→
+  1005→// ============================================================================
+  1006→// Extensible Record Type System (ISO 13485 §4.2.3 / §4.2.4)
+  1007→// ============================================================================
+  1008→
+  1009→export type RecordLinkType =
+  1010→  | 'parent_of' | 'child_of'
+  1011→  | 'caused_by' | 'corrected_by'
+  1012→  | 'related_to' | 'derived_from';
+  1013→
+  1014→export interface StatusFlowTransition {
+  1015→  from: string;
+  1016→  to: string;
+  1017→  required_role: UserRole[];
+  1018→}
+  1019→
+  1020→export interface StatusFlowConfig {
+  1021→  statuses: string[];
+  1022→  transitions: StatusFlowTransition[];
+  1023→  initial_status: string;
+  1024→}
+  1025→
+  1026→/**
+  1027→ * Compliance reference — links a record type to a specific clause of a
+  1028→ * regulatory standard (ISO 13485, ISO 14971, 21 CFR Part 11, ...).
+  1029→ *
+  1030→ * Stored as JSONB in `record_type_definitions.compliance_refs`.
+  1031→ */
+  1032→export interface ComplianceRef {
+  1033→  /** Clause identifier, e.g., '8.5.2' or '§7.5.6' */
+  1034→  clause: string;
+  1035→  /** Standard family, e.g., 'ISO 13485', 'ISO 14971', '21 CFR Part 11' */
+  1036→  standard: string;
+  1037→  /** Human-readable description of what this clause requires */
+  1038→  description?: string;
+  1039→}
+  1040→
+  1041→/**
+  1042→ * Status flow step definition — the original (camelCase) shape used by the
+  1043→ * demo store and the standalone `RecordTypeManager` component. Stored as
+  1044→ * JSONB in `record_type_definitions.status_flow`.
+  1045→ */
+  1046→export interface StatusFlowStep {
+  1047→  /** Linear progression steps */
+  1048→  linear: string[];
+  1049→  /** Branch states (e.g., Rejected, Disqualified) with return paths */
+  1050→  branches?: Record<string, string[]>;
+  1051→  /** States that require e-signature to transition to */
+  1052→  eSigRequired?: string[];
+  1053→  /** States that are terminal (no further transitions) */
+  1054→  terminal?: string[];
+  1055→}
+  1056→
+  1057→/**
+  1058→ * `RecordTypeDefinition` (snake_case) — the row shape returned by the
+  1059→ * Supabase `record_type_definitions` table. Used by `SettingsView.tsx`
+  1060→ * and the SQL migration layer.
+  1061→ */
+  1062→export interface RecordTypeDefinition {
+  1063→  id: string;
+  1064→  org_id: string;
+  1065→  slug: string;
+  1066→  name: string;
+  1067→  description: string | null;
+  1068→  is_system: boolean;
+  1069→  code_prefix: string;
+  1070→  status_flow: StatusFlowConfig;
+  1071→  json_schema: Record<string, unknown> | null;
+  1072→  created_by: string | null;
+  1073→  created_at: string;
+  1074→  updated_at: string;
+  1075→}
+  1076→
+  1077→/**
+  1078→ * `RecordTypeDefinitionLegacy` (camelCase) — the application-side shape used
+  1079→ * by the demo store (`src/lib/demo-store.ts`), the standalone
+  1080→ * `RecordTypeManager` component, and the Supabase `RecordTypeService` which
+  1081→ * maps SQL snake_case rows to this camelCase shape via `mapToCamel()`.
+  1082→ *
+  1083→ * Kept for backward compatibility with the agent-ctx architecture
+  1084→ * (see agent-ctx/3-a-module-enhancer.md and the original commit 0ac9066).
+  1085→ */
+  1086→export interface RecordTypeDefinitionLegacy {
+  1087→  id: string;
+  1088→  /** URL-safe slug — unique per organization */
+  1089→  slug: string;
+  1090→  /** Display name (French) */
+  1091→  name: string;
+  1092→  /** Display name (English) */
+  1093→  nameEn?: string;
+  1094→  /** Lucide icon name for navigation/UI */
+  1095→  icon: string;
+  1096→  description?: string;
+  1097→  /** Configurable status flow — replaces hardcoded MODULE_STATUS_FLOWS */
+  1098→  statusFlow: StatusFlowStep[];
+  1099→  /** Default form fields inherited by templates created for this type */
+  1100→  defaultFields: FormFieldDefinition[];
+  1101→  /** ISO 13485 / regulatory clause references for compliance mapping */
+  1102→  complianceRefs: ComplianceRef[];
+  1103→  /** Code prefix for auto-numbering (e.g., 'ETL' → ETL-2025-001) */
+  1104→  codePrefix?: string;
+  1105→  /** System types (true) cannot be deleted/deactivated — ISO 13485 §4.1 */
+  1106→  isSystem: boolean;
+  1107→  isActive: boolean;
+  1108→  /** Whether all transitions require e-signature */
+  1109→  requiresEsig: boolean;
+  1110→  /** Minimum number of approvers for Layer 1 template approval */
+  1111→  minApproverCount: number;
+  1112→  effectiveDate?: string;
+  1113→  previousVersionId?: string;
+  1114→  version: string;
+  1115→  changeReason?: string;
+  1116→  organizationId: string;
+  1117→  createdById?: string;
+  1118→  createdAt: string;
+  1119→  updatedAt: string;
+  1120→}
+  1121→
+  1122→export interface RecordLink {
+  1123→  id: string;
+  1124→  org_id: string;
+  1125→  source_type: string;
+  1126→  source_id: string;
+  1127→  target_type: string;
+  1128→  target_id: string;
+  1129→  link_type: RecordLinkType;
+  1130→  created_by: string | null;
+  1131→  created_at: string;
+  1132→}
+  1133→
+  1134→/**
+  1135→ * `RecordLinkLegacy` (camelCase) — the application-side shape used by the
+  1136→ * demo store and the `/api/record-links` route. The Supabase
+  1137→ * `RecordLinkService` maps SQL snake_case rows to this camelCase shape via
+  1138→ * `mapToCamel()`.
+  1139→ */
+  1140→export interface RecordLinkLegacy {
+  1141→  id: string;
+  1142→  sourceRecordId: string;
+  1143→  sourceRecordType: string;
+  1144→  targetRecordId: string;
+  1145→  targetRecordType: string;
+  1146→  linkType: string;
+  1147→  description?: string;
+  1148→  organizationId: string;
+  1149→  createdById?: string;
+  1150→  createdAt: string;
+  1151→}
+  1152→
+  1153→export interface CreateRecordTypeDefinitionDTO {
+  1154→  name: string;
+  1155→  description?: string;
+  1156→  code_prefix: string;
+  1157→  status_flow: StatusFlowConfig;
+  1158→  json_schema?: Record<string, unknown> | null;
+  1159→}
+  1160→
+  1161→/** 10 system module slugs — protected from modification/deletion */
+  1162→export const SYSTEM_RECORD_TYPE_SLUGS = [
+  1163→  'capa', 'ncr', 'deviation', 'change-control', 'audit',
+  1164→  'risk', 'training', 'supplier', 'batch-record', 'oos-oot',
+  1165→] as const;
+  1166→
+  1167→export type SystemRecordTypeSlug = typeof SYSTEM_RECORD_TYPE_SLUGS[number];
+  1168→
+  1169→// ============================================================================
+  1170→// Custom Fields
+  1171→// ============================================================================
+  1172→
+  1173→export type CustomFieldType = 'text' | 'number' | 'date' | 'select' | 'checkbox' | 'textarea' | 'url';
+  1174→
+  1175→export interface CustomFieldDefinition {
+  1176→  id: string;
+  1177→  name: string;
+  1178→  label: string;
+  1179→  type: CustomFieldType;
+  1180→  required: boolean;
+  1181→  options?: string[]; // for select type
+  1182→  placeholder?: string;
+  1183→  defaultValue?: string;
+  1184→  applicableTo: string[]; // document types this field applies to, or ['*'] for all
+  1185→  organizationId: string;
+  1186→  sortOrder: number;
+  1187→  createdAt: string;
+  1188→  updatedAt: string;
+  1189→}
+  1190→
+  1191→export interface CustomFieldValue {
+  1192→  definitionId: string;
+  1193→  value: string;
+  1194→}
+  1195→

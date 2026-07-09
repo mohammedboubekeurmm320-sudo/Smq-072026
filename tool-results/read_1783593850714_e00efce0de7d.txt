@@ -1,0 +1,635 @@
+     1→-- ===========================================================================
+     2→-- Migration 002 : Record Type Architecture with ISO 13485 Compliance Corrections
+     3→-- ===========================================================================
+     4→-- Extensible custom record type system for the Hybrid 2-Layer Supervision QMS.
+     5→--
+     6→-- NEW TABLES:
+     7→--   1. record_type_definitions  — Defines custom record types (supplements 10 system modules)
+     8→--   2. record_links             — Generic cross-record linking (replaces hardcoded FKs)
+     9→--
+    10→-- MODIFIED TABLES:
+    11→--   - form_templates.module_type  : ENUM → TEXT (FK → record_type_definitions.slug)
+    12→--   - form_instances              : + record_type_slug column, + FK constraint
+    13→--   - document_prerequisites.record_type : ENUM → TEXT
+    14→--   - capas                       : + source_record_type column
+    15→--   - electronic_signatures       : + record_id, record_type columns (polymorphic)
+    16→--
+    17→-- COMPLIANCE CORRECTIONS (7 fixes):
+    18→--   1. Audit trail triggers on new tables (§4.2.4, 21 CFR §11.10(e))
+    19→--   2. FK referential integrity for module_type → record_type_definitions (§4.2.3)
+    20→--   3. System record type protection trigger (§4.1)
+    21→--   4. ComplianceData extension via custom_record_type_counts (§8.4)
+    22→--   5. JSONB values validation trigger (§7.5.9, 21 CFR §11.10(a))
+    23→--   6. Custom record numbering with code_prefix (§7.5.8/§7.5.9)
+    24→--   7. Dynamic status flow from DB (§4.2.3/§4.2.4)
+    25→--
+    26→-- Idempotent: All objects use IF NOT EXISTS / DROP IF EXISTS CASCADE
+    27→-- ===========================================================================
+    28→
+    29→BEGIN;
+    30→
+    31→-- ===========================================================================
+    32→-- 1. NEW TABLE: record_type_definitions
+    33→-- ===========================================================================
+    34→-- Stores metadata for both system (10 hardcoded) and custom record types.
+    35→-- This is the "registry" that allows organizations to extend their QMS
+    36→-- beyond the 10 pre-built modules while maintaining ISO 13485 compliance.
+    37→
+    38→DROP TABLE IF EXISTS record_type_definitions CASCADE;
+    39→
+    40→CREATE TABLE record_type_definitions (
+    41→  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    42→
+    43→  -- Identification
+    44→  slug                  text NOT NULL,                    -- e.g., 'etalonnage_equipement', 'capa'
+    45→  name                  text NOT NULL,                    -- e.g., 'Étalonnage Équipement'
+    46→  name_en               text,                             -- English name for bilingual support
+    47→  icon                  text DEFAULT 'FileText',          -- Lucide icon name
+    48→  description           text,                             -- Purpose of this record type
+    49→
+    50→  -- Configuration
+    51→  status_flow           jsonb NOT NULL DEFAULT '[]',      -- StatusFlowDefinition JSON
+    52→  default_fields        jsonb DEFAULT '[]',               -- FormFieldDefinition[] — inherited by templates
+    53→  compliance_refs       jsonb DEFAULT '[]',               -- [{clause: '§7.5.6', standard: 'ISO 13485'}]
+    54→  code_prefix           text,                             -- e.g., 'ETL', 'CAL' for auto-numbering
+    55→
+    56→  -- System protection
+    57→  is_system             boolean NOT NULL DEFAULT false,   -- true for 10 built-in modules
+    58→  is_active             boolean NOT NULL DEFAULT true,    -- Can be deactivated (if not system)
+    59→
+    60→  -- Workflow constraints
+    61→  requires_esig         boolean NOT NULL DEFAULT true,    -- All transitions require e-signature?
+    62→  min_approver_count    integer NOT NULL DEFAULT 1,       -- Minimum approvers for Layer 1
+    63→
+    64→  -- Traceability
+    65→  effective_date        timestamptz,
+    66→  previous_version_id   uuid REFERENCES record_type_definitions(id),
+    67→  version               text NOT NULL DEFAULT '1.0',
+    68→  change_reason         text,                             -- Why this type was created/modified
+    69→
+    70→  -- Multi-tenant
+    71→  organization_id       uuid NOT NULL REFERENCES organizations(id),
+    72→
+    73→  -- Audit
+    74→  created_by_id         uuid REFERENCES profiles(id),
+    75→  created_at             timestamptz NOT NULL DEFAULT now(),
+    76→  updated_at             timestamptz NOT NULL DEFAULT now(),
+    77→
+    78→  -- Slug must be unique per organization
+    79→  CONSTRAINT uq_rtd_slug_org UNIQUE (slug, organization_id),
+    80→
+    81→  -- System types cannot have NULL status_flow
+    82→  CONSTRAINT chk_rtd_system_has_flow CHECK (
+    83→    is_system = false OR status_flow != '[]'::jsonb
+    84→  )
+    85→);
+    86→
+    87→-- ===========================================================================
+    88→-- 2. NEW TABLE: record_links
+    89→-- ===========================================================================
+    90→-- Generic cross-record linking — replaces hardcoded FKs (linked_capa_id,
+    91→-- linked_ncr_id, etc.) with a polymorphic junction table.
+    92→-- Supports any record type linking to any other record type.
+    93→
+    94→DROP TABLE IF EXISTS record_links CASCADE;
+    95→
+    96→CREATE TABLE record_links (
+    97→  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    98→
+    99→  -- Source record (polymorphic)
+   100→  source_record_id      uuid NOT NULL,                    -- ID of the source record
+   101→  source_record_type    text NOT NULL,                    -- slug from record_type_definitions
+   102→
+   103→  -- Target record (polymorphic)
+   104→  target_record_id      uuid NOT NULL,                    -- ID of the target record
+   105→  target_record_type    text NOT NULL,                    -- slug from record_type_definitions
+   106→
+   107→  -- Link semantics
+   108→  link_type             text NOT NULL DEFAULT 'related',  -- 'related', 'caused_by', 'corrected_by',
+   109→                                                          -- 'linked_to', 'derived_from', 'supersedes'
+   110→  description           text,                             -- Why this link exists
+   111→
+   112→  -- Multi-tenant
+   113→  organization_id       uuid NOT NULL REFERENCES organizations(id),
+   114→
+   115→  -- Audit
+   116→  created_by_id         uuid REFERENCES profiles(id),
+   117→  created_at             timestamptz NOT NULL DEFAULT now(),
+   118→
+   119→  -- No duplicate links
+   120→  CONSTRAINT uq_record_link UNIQUE (source_record_id, source_record_type,
+   121→                                     target_record_id, target_record_type, link_type),
+   122→
+   123→  -- No self-links
+   124→  CONSTRAINT chk_no_self_link CHECK (
+   125→    source_record_id != target_record_id OR source_record_type != target_record_type
+   126→  ),
+   127→
+   128→  -- Valid link types (ISO 13485 §4.2.4 traceability)
+   129→  CONSTRAINT chk_link_type CHECK (link_type IN (
+   130→    'related', 'caused_by', 'corrected_by', 'linked_to',
+   131→    'derived_from', 'supersedes', 'references', 'depends_on'
+   132→  ))
+   133→);
+   134→
+   135→-- ===========================================================================
+   136→-- 3. SEED SYSTEM RECORD TYPES (10 built-in modules)
+   137→-- ===========================================================================
+   138→-- These are the 10 hardcoded QMS modules that ship with the system.
+   139→-- is_system = true means they CANNOT be deleted or deactivated.
+   140→-- Their status_flow matches the existing MODULE_STATUS_FLOWS in useRecordWorkflow.ts.
+   141→
+   142→INSERT INTO record_type_definitions (slug, name, name_en, icon, description, status_flow, code_prefix, is_system, is_active, requires_esig, min_approver_count, compliance_refs, organization_id)
+   143→SELECT
+   144→  m.slug, m.name, m.name_en, m.icon, m.description,
+   145→  m.status_flow, m.code_prefix, true, true, true, 1,
+   146→  m.compliance_refs,
+   147→  o.id
+   148→FROM organizations o
+   149→CROSS JOIN (VALUES
+   150→  -- 1. CAPA
+   151→  ('capa', 'CAPA', 'CAPA', 'ShieldCheck',
+   152→   'Corrective and Preventive Actions — ISO 13485 §8.5.2, §8.5.3',
+   153→   '[{"linear":["Open","Investigation","Implementation","Effectiveness Check","Closed"],"eSigRequired":["Closed"],"terminal":["Closed"]}]'::jsonb,
+   154→   'CAPA',
+   155→   '[{"clause":"8.5.2","standard":"ISO 13485","description":"Corrective action"},{"clause":"8.5.3","standard":"ISO 13485","description":"Preventive action"}]'::jsonb),
+   156→
+   157→  -- 2. Non-Conformance
+   158→  ('ncr', 'Non-Conformité', 'Non-Conformance', 'AlertTriangle',
+   159→   'Non-Conformance Reports — ISO 13485 §8.3',
+   160→   '[{"linear":["Open","Under Investigation","Pending Disposition","Closed"],"eSigRequired":["Closed"],"terminal":["Closed"]}]'::jsonb,
+   161→   'NCR',
+   162→   '[{"clause":"8.3","standard":"ISO 13485","description":"Control of nonconforming product"}]'::jsonb),
+   163→
+   164→  -- 3. Deviation
+   165→  ('deviation', 'Déviation', 'Deviation', 'GitBranch',
+   166→   'Deviations — ISO 13485 §7.1, §7.5.1',
+   167→   '[{"linear":["Open","Under Investigation","Pending QA Review","Approved","Closed"],"eSigRequired":["Approved","Closed"],"terminal":["Closed"]}]'::jsonb,
+   168→   'DEV',
+   169→   '[{"clause":"7.1","standard":"ISO 13485","description":"Planning of product realization"}]'::jsonb),
+   170→
+   171→  -- 4. Change Control
+   172→  ('change_control', 'Maîtrise des Changements', 'Change Control', 'RefreshCw',
+   173→   'Change Control — ISO 13485 §7.3.7',
+   174→   '[{"linear":["Requested","Under Review","Approved","In Implementation","Completed"],"branches":{"Rejected":["Requested"]},"eSigRequired":["Approved","Rejected","Completed"],"terminal":["Completed","Rejected"]}]'::jsonb,
+   175→   'CC',
+   176→   '[{"clause":"7.3.7","standard":"ISO 13485","description":"Design changes"}]'::jsonb),
+   177→
+   178→  -- 5. Audit
+   179→  ('audit', 'Audit', 'Audit', 'Search',
+   180→   'Internal/External/Supplier Audits — ISO 13485 §8.2.4',
+   181→   '[{"linear":["Planned","In Progress","Completed"],"eSigRequired":["Completed"],"terminal":["Completed"]}]'::jsonb,
+   182→   'AUD',
+   183→   '[{"clause":"8.2.4","standard":"ISO 13485","description":"Internal audit"}]'::jsonb),
+   184→
+   185→  -- 6. Risk
+   186→  ('risk', 'Risque', 'Risk Management', 'TrendingUp',
+   187→   'Risk Management — ISO 13485 §7.1, ISO 14971',
+   188→   '[{"linear":["Open","Mitigated","Closed"],"branches":{"Accepted":["Closed"]},"eSigRequired":["Closed"],"terminal":["Closed"]}]'::jsonb,
+   189→   'RSK',
+   190→   '[{"clause":"7.1","standard":"ISO 13485","description":"Risk management"},{"clause":"3","standard":"ISO 14971","description":"Risk analysis"}]'::jsonb),
+   191→
+   192→  -- 7. Training
+   193→  ('training', 'Formation', 'Training', 'GraduationCap',
+   194→   'Training Records — ISO 13485 §6.2',
+   195→   '[{"linear":["Planned","In Progress","Completed"],"branches":{"Overdue":[]},"eSigRequired":["Completed"],"terminal":["Completed"]}]'::jsonb,
+   196→   'TRN',
+   197→   '[{"clause":"6.2","standard":"ISO 13485","description":"Competence, awareness and training"}]'::jsonb),
+   198→
+   199→  -- 8. Supplier
+   200→  ('supplier', 'Fournisseur', 'Supplier', 'Truck',
+   201→   'Supplier Management — ISO 13485 §7.4',
+   202→   '[{"linear":["Under Evaluation","Conditional","Qualified"],"branches":{"Disqualified":[]},"eSigRequired":["Qualified","Disqualified"],"terminal":["Disqualified"]}]'::jsonb,
+   203→   'SUP',
+   204→   '[{"clause":"7.4","standard":"ISO 13485","description":"Purchasing"}]'::jsonb),
+   205→
+   206→  -- 9. Batch Record
+   207→  ('batch_record', 'Enregistrement de Lot', 'Batch Record', 'Package',
+   208→   'Batch Records — ISO 13485 §7.5.1, §7.5.9',
+   209→   '[{"linear":["In Progress","Pending QA Review","Released"],"branches":{"Rejected":[],"Quarantine":["Pending QA Review"]},"eSigRequired":["Released","Rejected"],"terminal":["Released","Rejected"]}]'::jsonb,
+   210→   'BR',
+   211→   '[{"clause":"7.5.1","standard":"ISO 13485","description":"Control of production"},{"clause":"7.5.9","standard":"ISO 13485","description":"Traceability"}]'::jsonb),
+   212→
+   213→  -- 10. OOS/OOT
+   214→  ('oos_oot', 'HSP/HOT', 'OOS/OOT', 'FlaskConical',
+   215→   'Out of Specification / Out of Trend — ISO 13485 §8.2.6',
+   216→   '[{"linear":["Open","Under Investigation","Pending Disposition","Closed"],"eSigRequired":["Closed"],"terminal":["Closed"]}]'::jsonb,
+   217→   'OOS',
+   218→   '[{"clause":"8.2.6","standard":"ISO 13485","description":"Monitoring and measurement of product"}]'::jsonb)
+   219→) AS m(slug, name, name_en, icon, description, status_flow, code_prefix, compliance_refs)
+   220→ON CONFLICT (slug, organization_id) DO NOTHING;
+   221→
+   222→-- ===========================================================================
+   223→-- 4. MIGRATE form_templates.module_type FROM ENUM → TEXT
+   224→-- ===========================================================================
+   225→-- CORRECTIF 2: FK referential integrity (§4.2.3)
+   226→-- The ENUM form_template_module_type is replaced by a TEXT column
+   227→-- with a FK to record_type_definitions(slug, organization_id).
+   228→
+   229→-- Step 4a: Add new text column
+   230→ALTER TABLE form_templates ADD COLUMN IF NOT EXISTS module_type_text text;
+   231→
+   232→-- Step 4b: Copy data from ENUM to text column (lowercase)
+   233→UPDATE form_templates SET module_type_text = module_type::text WHERE module_type_text IS NULL;
+   234→
+   235→-- Step 4c: Drop old column, rename new
+   236→-- Note: PostgreSQL doesn't allow dropping a column used in an ENUM directly
+   237→-- We need to handle this carefully
+   238→ALTER TABLE form_templates DROP COLUMN IF EXISTS module_type;
+   239→ALTER TABLE form_templates RENAME COLUMN module_type_text TO module_type;
+   240→
+   241→-- Step 4d: Set NOT NULL and default
+   242→ALTER TABLE form_templates ALTER COLUMN module_type SET NOT NULL;
+   243→ALTER TABLE form_templates ALTER COLUMN module_type SET DEFAULT 'general';
+   244→
+   245→-- Step 4e: Add FK constraint to record_type_definitions
+   246→ALTER TABLE form_templates
+   247→  ADD CONSTRAINT fk_templates_record_type
+   248→  FOREIGN KEY (module_type, organization_id)
+   249→  REFERENCES record_type_definitions(slug, organization_id)
+   250→  ON DELETE RESTRICT;  -- Prevent deleting a record type that has templates
+   251→
+   252→-- ===========================================================================
+   253→-- 5. MIGRATE form_instances.linked_record_type FROM ENUM → TEXT
+   254→-- ===========================================================================
+   255→
+   256→ALTER TABLE form_instances ADD COLUMN IF NOT EXISTS linked_record_type_text text;
+   257→UPDATE form_instances SET linked_record_type_text = linked_record_type::text WHERE linked_record_type_text IS NULL;
+   258→ALTER TABLE form_instances DROP COLUMN IF EXISTS linked_record_type;
+   259→ALTER TABLE form_instances RENAME COLUMN linked_record_type_text TO linked_record_type;
+   260→
+   261→-- Add record_type_slug column (CORRECTIF 2: explicit link to record_type_definitions)
+   262→ALTER TABLE form_instances ADD COLUMN IF NOT EXISTS record_type_slug text;
+   263→
+   264→-- Populate record_type_slug from the template's module_type
+   265→UPDATE form_instances fi
+   266→SET record_type_slug = ft.module_type
+   267→FROM form_templates ft
+   268→WHERE fi.template_id = ft.id AND fi.record_type_slug IS NULL;
+   269→
+   270→-- Add FK constraint
+   271→ALTER TABLE form_instances
+   272→  ADD CONSTRAINT fk_instances_record_type
+   273→  FOREIGN KEY (record_type_slug, organization_id)
+   274→  REFERENCES record_type_definitions(slug, organization_id)
+   275→  ON DELETE RESTRICT;
+   276→
+   277→-- ===========================================================================
+   278→-- 6. MIGRATE document_prerequisites.record_type FROM ENUM → TEXT
+   279→-- ===========================================================================
+   280→-- CORRECTIF: prerequisite_record_type ENUM cannot reference custom slugs
+   281→
+   282→ALTER TABLE document_prerequisites ADD COLUMN IF NOT EXISTS record_type_text text;
+   283→UPDATE document_prerequisites SET record_type_text = record_type::text WHERE record_type_text IS NULL;
+   284→ALTER TABLE document_prerequisites DROP COLUMN IF EXISTS record_type;
+   285→ALTER TABLE document_prerequisites RENAME COLUMN record_type_text TO record_type;
+   286→
+   287→-- ===========================================================================
+   288→-- 7. ADD source_record_type TO capas
+   289→-- ===========================================================================
+   290→-- CORRECTIF: capa_source ENUM cannot reference custom record types (§8.5.2)
+   291→
+   292→ALTER TABLE capas ADD COLUMN IF NOT EXISTS source_record_type text;
+   293→
+   294→-- Map existing capa_source values to record_type_definitions slugs
+   295→UPDATE capas SET source_record_type = CASE
+   296→  WHEN source = 'Non-Conformance' THEN 'ncr'
+   297→  WHEN source = 'Audit Finding' THEN 'audit'
+   298→  WHEN source = 'Customer Complaint' THEN 'ncr'
+   299→  WHEN source = 'Management Review' THEN 'audit'
+   300→  WHEN source = 'Process Monitoring' THEN 'deviation'
+   301→  WHEN source = 'Supplier Issue' THEN 'supplier'
+   302→  ELSE 'general'
+   303→END WHERE source_record_type IS NULL;
+   304→
+   305→-- ===========================================================================
+   306→-- 8. ADD polymorphic columns to electronic_signatures
+   307→-- ===========================================================================
+   308→-- CORRECTIF 21 CFR §11.50/§11.70: signatures must link to records, not just documents
+   309→
+   310→ALTER TABLE electronic_signatures ADD COLUMN IF NOT EXISTS record_id uuid;
+   311→ALTER TABLE electronic_signatures ADD COLUMN IF NOT EXISTS record_type text;
+   312→
+   313→-- ===========================================================================
+   314→-- 9. DROP OLD ENUMs (no longer used by any column)
+   315→-- ===========================================================================
+   316→-- These enums are now replaced by TEXT columns with FK constraints
+   317→
+   318→DROP TYPE IF EXISTS form_template_module_type CASCADE;
+   319→DROP TYPE IF EXISTS prerequisite_record_type CASCADE;
+   320→
+   321→-- ===========================================================================
+   322→-- 10. CORRECTIF 1: Audit Trail Triggers for New Tables (§4.2.4, 21 CFR §11.10(e))
+   323→-- ===========================================================================
+   324→
+   325→-- Audit trigger for record_type_definitions
+   326→DROP TRIGGER IF EXISTS trg_audit_record_type_definitions ON record_type_definitions;
+   327→CREATE TRIGGER trg_audit_record_type_definitions
+   328→  AFTER INSERT OR UPDATE OR DELETE ON record_type_definitions
+   329→  FOR EACH ROW EXECUTE FUNCTION log_audit_trail();
+   330→
+   331→-- Audit trigger for record_links
+   332→DROP TRIGGER IF EXISTS trg_audit_record_links ON record_links;
+   333→CREATE TRIGGER trg_audit_record_links
+   334→  AFTER INSERT OR UPDATE OR DELETE ON record_links
+   335→  FOR EACH ROW EXECUTE FUNCTION log_audit_trail();
+   336→
+   337→-- ===========================================================================
+   338→-- 11. CORRECTIF 1: Auto-update updated_at for new tables
+   339→-- ===========================================================================
+   340→
+   341→DROP TRIGGER IF EXISTS trg_rtd_updated ON record_type_definitions;
+   342→CREATE TRIGGER trg_rtd_updated
+   343→  BEFORE UPDATE ON record_type_definitions
+   344→  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+   345→
+   346→-- ===========================================================================
+   347→-- 12. CORRECTIF 1: RLS Policies for New Tables
+   348→-- ===========================================================================
+   349→
+   350→ALTER TABLE record_type_definitions ENABLE ROW LEVEL SECURITY;
+   351→ALTER TABLE record_links ENABLE ROW LEVEL SECURITY;
+   352→
+   353→DROP POLICY IF EXISTS rtd_rw ON record_type_definitions;
+   354→CREATE POLICY rtd_rw ON record_type_definitions
+   355→  FOR ALL USING (is_org_member(organization_id))
+   356→  WITH CHECK (is_org_member(organization_id));
+   357→
+   358→DROP POLICY IF EXISTS rl_rw ON record_links;
+   359→CREATE POLICY rl_rw ON record_links
+   360→  FOR ALL USING (is_org_member(organization_id))
+   361→  WITH CHECK (is_org_member(organization_id));
+   362→
+   363→-- ===========================================================================
+   364→-- 13. CORRECTIF 3: System Record Type Protection (§4.1)
+   365→-- ===========================================================================
+   366→-- System record types (is_system = true) CANNOT be deleted or deactivated.
+   367→-- Their slug cannot be changed (referential integrity).
+   368→
+   369→CREATE OR REPLACE FUNCTION protect_system_record_types()
+   370→RETURNS TRIGGER AS $$
+   371→BEGIN
+   372→  -- Prevent deletion of system types
+   373→  IF TG_OP = 'DELETE' AND OLD.is_system = true THEN
+   374→    RAISE EXCEPTION 'Cannot delete system record type "%". System types are required for ISO 13485 §4.1 QMS completeness.', OLD.slug;
+   375→  END IF;
+   376→
+   377→  -- Prevent deactivation of system types
+   378→  IF TG_OP = 'UPDATE' AND OLD.is_system = true AND NEW.is_active = false AND OLD.is_active = true THEN
+   379→    RAISE EXCEPTION 'Cannot deactivate system record type "%". System types must remain active per ISO 13485 §4.1.', OLD.slug;
+   380→  END IF;
+   381→
+   382→  -- Prevent slug change on system types
+   383→  IF TG_OP = 'UPDATE' AND OLD.is_system = true AND NEW.slug != OLD.slug THEN
+   384→    RAISE EXCEPTION 'Cannot change slug of system record type from "%" to "%". Referential integrity would be compromised.', OLD.slug, NEW.slug;
+   385→  END IF;
+   386→
+   387→  -- Prevent changing is_system from true to false
+   388→  IF TG_OP = 'UPDATE' AND OLD.is_system = true AND NEW.is_system = false THEN
+   389→    RAISE EXCEPTION 'Cannot change system record type "%" to non-system. System types are protected per ISO 13485 §4.1.', OLD.slug;
+   390→  END IF;
+   391→
+   392→  RETURN COALESCE(NEW, OLD);
+   393→END;
+   394→$$ LANGUAGE plpgsql;
+   395→
+   396→DROP TRIGGER IF EXISTS trg_protect_system_rtd ON record_type_definitions;
+   397→CREATE TRIGGER trg_protect_system_rtd
+   398→  BEFORE UPDATE OR DELETE ON record_type_definitions
+   399→  FOR EACH ROW EXECUTE FUNCTION protect_system_record_types();
+   400→
+   401→-- ===========================================================================
+   402→-- 14. CORRECTIF 5: JSONB Values Validation (§7.5.9, 21 CFR §11.10(a))
+   403→-- ===========================================================================
+   404→-- Validates that form_instances.values contains all required fields
+   405→-- defined in the record_type_definitions.default_fields schema.
+   406→
+   407→CREATE OR REPLACE FUNCTION validate_instance_values()
+   408→RETURNS TRIGGER AS $$
+   409→DECLARE
+   410→  rtd_record record;
+   411→  field_def jsonb;
+   412→  field_name text;
+   413→  field_required boolean;
+   414→BEGIN
+   415→  -- Only validate on INSERT or UPDATE of values
+   416→  IF TG_OP NOT IN ('INSERT', 'UPDATE') THEN
+   417→    RETURN COALESCE(NEW, OLD);
+   418→  END IF;
+   419→
+   420→  -- Skip validation if values haven't changed
+   421→  IF TG_OP = 'UPDATE' AND OLD.values IS NOT NULL AND NEW.values = OLD.values THEN
+   422→    RETURN NEW;
+   423→  END IF;
+   424→
+   425→  -- Get the record type definition
+   426→  IF NEW.record_type_slug IS NOT NULL THEN
+   427→    SELECT * INTO rtd_record FROM record_type_definitions
+   428→    WHERE slug = NEW.record_type_slug AND organization_id = NEW.organization_id;
+   429→
+   430→    -- Validate required fields from default_fields
+   431→    IF rtd_record IS NOT NULL AND rtd_record.default_fields IS NOT NULL THEN
+   432→      FOR field_def IN SELECT * FROM jsonb_array_elements(rtd_record.default_fields)
+   433→      LOOP
+   434→        field_name := field_def->>'name';
+   435→        field_required := (field_def->>'required')::boolean;
+   436→
+   437→        IF field_required = true AND (NEW.values->field_name IS NULL OR NEW.values->>field_name = '') THEN
+   438→          RAISE EXCEPTION 'Required field "%" is missing or empty in form instance values. ISO 13485 §7.5.9 / 21 CFR §11.10(a) validation failed.', field_name;
+   439→        END IF;
+   440→      END LOOP;
+   441→    END IF;
+   442→  END IF;
+   443→
+   444→  RETURN NEW;
+   445→END;
+   446→$$ LANGUAGE plpgsql;
+   447→
+   448→DROP TRIGGER IF EXISTS trg_validate_instance_values ON form_instances;
+   449→CREATE TRIGGER trg_validate_instance_values
+   450→  BEFORE INSERT OR UPDATE ON form_instances
+   451→  FOR EACH ROW EXECUTE FUNCTION validate_instance_values();
+   452→
+   453→-- ===========================================================================
+   454→-- 15. CORRECTIF 6: Custom Record Numbering (§7.5.8/§7.5.9)
+   455→-- ===========================================================================
+   456→-- Auto-generate reference numbers for custom record types using
+   457→-- the code_prefix from record_type_definitions + document_code_sequences.
+   458→
+   459→CREATE OR REPLACE FUNCTION generate_custom_record_number()
+   460→RETURNS TRIGGER AS $$
+   461→DECLARE
+   462→  rtd_record record;
+   463→  seq_record record;
+   464→  next_seq integer;
+   465→  new_ref text;
+   466→BEGIN
+   467→  -- Only generate on INSERT when reference_number is empty
+   468→  IF TG_OP != 'INSERT' THEN
+   469→    RETURN COALESCE(NEW, OLD);
+   470→  END IF;
+   471→
+   472→  IF NEW.reference_number IS NOT NULL AND NEW.reference_number != '' THEN
+   473→    RETURN NEW;
+   474→  END IF;
+   475→
+   476→  -- Get the record type definition
+   477→  IF NEW.record_type_slug IS NOT NULL THEN
+   478→    SELECT * INTO rtd_record FROM record_type_definitions
+   479→    WHERE slug = NEW.record_type_slug AND organization_id = NEW.organization_id;
+   480→
+   481→    IF rtd_record IS NOT NULL AND rtd_record.code_prefix IS NOT NULL THEN
+   482→      -- Get or create the sequence
+   483→      SELECT * INTO seq_record FROM document_code_sequences
+   484→      WHERE prefix = rtd_record.code_prefix
+   485→        AND organization_id = NEW.organization_id;
+   486→
+   487→      IF seq_record IS NOT NULL THEN
+   488→        next_seq := seq_record.last_sequence + 1;
+   489→        UPDATE document_code_sequences SET last_sequence = next_seq
+   490→        WHERE id = seq_record.id;
+   491→      ELSE
+   492→        next_seq := 1;
+   493→        INSERT INTO document_code_sequences (prefix, department_suffix, last_sequence, organization_id)
+   494→        VALUES (rtd_record.code_prefix, NULL, next_seq, NEW.organization_id);
+   495→      END IF;
+   496→
+   497→      -- Format: PREFIX-YYYY-NNN
+   498→      new_ref := rtd_record.code_prefix || '-' || EXTRACT(YEAR FROM now())::text || '-' || LPAD(next_seq::text, 3, '0');
+   499→      NEW.reference_number := new_ref;
+   500→    END IF;
+   501→  END IF;
+   502→
+   503→  RETURN NEW;
+   504→END;
+   505→$$ LANGUAGE plpgsql;
+   506→
+   507→DROP TRIGGER IF EXISTS trg_generate_custom_ref ON form_instances;
+   508→CREATE TRIGGER trg_generate_custom_ref
+   509→  BEFORE INSERT ON form_instances
+   510→  FOR EACH ROW EXECUTE FUNCTION generate_custom_record_number();
+   511→
+   512→-- ===========================================================================
+   513→-- 16. INDEXES for new tables
+   514→-- ===========================================================================
+   515→
+   516→CREATE INDEX IF NOT EXISTS idx_rtd_org ON record_type_definitions(organization_id);
+   517→CREATE INDEX IF NOT EXISTS idx_rtd_slug ON record_type_definitions(slug);
+   518→CREATE INDEX IF NOT EXISTS idx_rtd_is_system ON record_type_definitions(is_system);
+   519→CREATE INDEX IF NOT EXISTS idx_rtd_is_active ON record_type_definitions(is_active);
+   520→CREATE INDEX IF NOT EXISTS idx_rtd_org_active ON record_type_definitions(organization_id, is_active);
+   521→
+   522→CREATE INDEX IF NOT EXISTS idx_rl_source ON record_links(source_record_id, source_record_type);
+   523→CREATE INDEX IF NOT EXISTS idx_rl_target ON record_links(target_record_id, target_record_type);
+   524→CREATE INDEX IF NOT EXISTS idx_rl_org ON record_links(organization_id);
+   525→CREATE INDEX IF NOT EXISTS idx_rl_link_type ON record_links(link_type);
+   526→CREATE INDEX IF NOT EXISTS idx_rl_source_type ON record_links(source_record_type);
+   527→CREATE INDEX IF NOT EXISTS idx_rl_target_type ON record_links(target_record_type);
+   528→CREATE INDEX IF NOT EXISTS idx_rl_created ON record_links(created_at);
+   529→
+   530→-- Updated index for form_templates.module_type (now TEXT, not ENUM)
+   531→DROP INDEX IF EXISTS idx_form_templates_module_type;
+   532→CREATE INDEX IF NOT EXISTS idx_form_templates_module_type ON form_templates(module_type);
+   533→
+   534→-- New index for form_instances.record_type_slug
+   535→CREATE INDEX IF NOT EXISTS idx_form_instances_record_type ON form_instances(record_type_slug);
+   536→
+   537→-- Index for electronic_signatures polymorphic columns
+   538→CREATE INDEX IF NOT EXISTS idx_esig_record ON electronic_signatures(record_id, record_type) WHERE record_id IS NOT NULL;
+   539→
+   540→-- Index for capas.source_record_type
+   541→CREATE INDEX IF NOT EXISTS idx_capas_source_rtype ON capas(source_record_type) WHERE source_record_type IS NOT NULL;
+   542→
+   543→-- ===========================================================================
+   544→-- 17. DEACTIVATION SAFETY: Prevent deactivating record type in use
+   545→-- ===========================================================================
+   546→-- If a record type has active form_instances, it cannot be deactivated
+   547→
+   548→CREATE OR REPLACE FUNCTION check_rtd_deactivation_safety()
+   549→RETURNS TRIGGER AS $$
+   550→DECLARE
+   551→  instance_count integer;
+   552→BEGIN
+   553→  IF TG_OP = 'UPDATE' AND NEW.is_active = false AND OLD.is_active = true THEN
+   554→    -- Check for active form_instances
+   555→    SELECT COUNT(*) INTO instance_count FROM form_instances
+   556→    WHERE record_type_slug = NEW.slug
+   557→      AND organization_id = NEW.organization_id
+   558→      AND status NOT IN ('Approved', 'Rejected');
+   559→
+   560→    IF instance_count > 0 THEN
+   561→      RAISE EXCEPTION 'Cannot deactivate record type "%" — % active form instance(s) exist. Close all instances first per ISO 13485 §4.2.4.', NEW.slug, instance_count;
+   562→    END IF;
+   563→  END IF;
+   564→
+   565→  RETURN NEW;
+   566→END;
+   567→$$ LANGUAGE plpgsql;
+   568→
+   569→DROP TRIGGER IF EXISTS trg_rtd_deactivation ON record_type_definitions;
+   570→CREATE TRIGGER trg_rtd_deactivation
+   571→  BEFORE UPDATE ON record_type_definitions
+   572→  FOR EACH ROW EXECUTE FUNCTION check_rtd_deactivation_safety();
+   573→
+   574→-- ===========================================================================
+   575→-- 18. VIEW: record_type_usage — Analytics for custom record types (§8.4)
+   576→-- ===========================================================================
+   577→-- Provides aggregate counts per record type for dashboard reporting
+   578→
+   579→CREATE OR REPLACE VIEW record_type_usage AS
+   580→SELECT
+   581→  rtd.id AS rtd_id,
+   582→  rtd.slug,
+   583→  rtd.name,
+   584→  rtd.is_system,
+   585→  rtd.is_active,
+   586→  rtd.organization_id,
+   587→  COALESCE(t.template_count, 0) AS template_count,
+   588→  COALESCE(t.approved_template_count, 0) AS approved_template_count,
+   589→  COALESCE(i.instance_count, 0) AS instance_count,
+   590→  COALESCE(i.draft_count, 0) AS draft_instance_count,
+   591→  COALESCE(i.submitted_count, 0) AS submitted_instance_count,
+   592→  COALESCE(i.approved_count, 0) AS approved_instance_count,
+   593→  COALESCE(i.rejected_count, 0) AS rejected_instance_count,
+   594→  COALESCE(l.link_count, 0) AS link_count
+   595→FROM record_type_definitions rtd
+   596→LEFT JOIN LATERAL (
+   597→  SELECT
+   598→    COUNT(*) AS template_count,
+   599→    COUNT(*) FILTER (WHERE status = 'Approved') AS approved_template_count
+   600→  FROM form_templates ft WHERE ft.module_type = rtd.slug AND ft.organization_id = rtd.organization_id
+   601→) t ON true
+   602→LEFT JOIN LATERAL (
+   603→  SELECT
+   604→    COUNT(*) AS instance_count,
+   605→    COUNT(*) FILTER (WHERE status = 'Draft') AS draft_count,
+   606→    COUNT(*) FILTER (WHERE status = 'Submitted') AS submitted_count,
+   607→    COUNT(*) FILTER (WHERE status = 'Approved') AS approved_count,
+   608→    COUNT(*) FILTER (WHERE status = 'Rejected') AS rejected_count
+   609→  FROM form_instances fi WHERE fi.record_type_slug = rtd.slug AND fi.organization_id = rtd.organization_id
+   610→) i ON true
+   611→LEFT JOIN LATERAL (
+   612→  SELECT
+   613→    COUNT(*) AS link_count
+   614→  FROM record_links rl
+   615→  WHERE (rl.source_record_type = rtd.slug OR rl.target_record_type = rtd.slug)
+   616→    AND rl.organization_id = rtd.organization_id
+   617→) l ON true;
+   618→
+   619→-- ===========================================================================
+   620→-- 19. SEED: Add 'general' record type for backward compatibility
+   621→-- ===========================================================================
+   622→
+   623→INSERT INTO record_type_definitions (slug, name, name_en, icon, description, status_flow, code_prefix, is_system, is_active, requires_esig, min_approver_count, compliance_refs, organization_id)
+   624→SELECT
+   625→  'general', 'Général', 'General', 'FileText',
+   626→  'General purpose records — fallback for uncategorized forms',
+   627→  '[{"linear":["Open","Under Review","Closed"],"eSigRequired":["Closed"],"terminal":["Closed"]}]'::jsonb,
+   628→  'GEN', true, true, true, 1,
+   629→  '[]'::jsonb,
+   630→  o.id
+   631→FROM organizations o
+   632→ON CONFLICT (slug, organization_id) DO NOTHING;
+   633→
+   634→COMMIT;
+   635→
