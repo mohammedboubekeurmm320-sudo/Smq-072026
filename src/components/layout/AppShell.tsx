@@ -13,7 +13,7 @@ import {
   ShieldCheck, LayoutDashboard, FileText, GitBranch, AlertTriangle, Shield, AlertOctagon,
   ArrowLeftRight, ClipboardCheck, BarChart3, GraduationCap, Package, Truck, FlaskConical,
   FileSpreadsheet, PieChart, CheckCircle2, Users, Settings as SettingsIcon, LogOut, Menu,
-  CalendarClock, FolderOpen, ScrollText, Layers,
+  CalendarClock, FolderOpen, ScrollText, Layers, Search,
 } from 'lucide-react'
 import { SetupWizard } from '@/components/setup/SetupWizard'
 import { Login } from '@/components/auth/Login'
@@ -108,6 +108,14 @@ export function AppShell({ children }: { children: React.ReactNode | ((props: { 
             <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">{industryConfig.primaryStandard}</Badge>
           </div>
         )}
+        <button
+          onClick={() => { setActive('dashboard' as any); setTimeout(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })), 100) }}
+          className="mt-3 w-full flex items-center gap-2 px-3 py-2 text-sm border rounded-md text-muted-foreground hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          <Search className="h-4 w-4" />
+          <span>Rechercher…</span>
+          <kbd className="ml-auto text-xs px-1.5 py-0.5 border rounded bg-slate-50 dark:bg-slate-900">Ctrl+K</kbd>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-3 space-y-4">

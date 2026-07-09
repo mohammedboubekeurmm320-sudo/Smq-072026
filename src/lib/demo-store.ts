@@ -1064,7 +1064,7 @@ async function seedDemoData() {
       setup_completed: true,
       industry_type: 'medical_device',
       applicable_standards: STANDARDS_BY_INDUSTRY.medical_device,
-      active_modules: [...INDUSTRY_CONFIG.medical_device.recommendedModules] as ModuleKey[],
+      active_modules: [...INDUSTRY_CONFIG.medical_device.recommendedModules, 'oos_oot', 'deviations'] as ModuleKey[],
       company_name: 'MediQuality Devices SARL',
       country: 'France', city: 'Lyon', org_size: '50-200',
       notifications: { capa_overdue: true, ncr_overdue: true, document_expiry: true, training_overdue: true, audit_due: true },
@@ -1421,6 +1421,128 @@ async function seedDemoData() {
     targetRecordId: capa1.id, targetRecordType: 'capa',
     linkType: 'derived_from', description: 'CAPA préventive dérivée de la CAPA corrective initiale',
   } as any)
+
+  // Seed form templates (Layer 1) — Approved CAPA template + Draft NCR template
+  const capaTemplate: any = {
+    id: 'ft_capa_v1', title: 'Template CAPA (Standard)', version: '1.0',
+    description: 'Template standard pour les actions correctives et préventives',
+    fields: [
+      { id: 'f1', name: 'problemStatement', label: 'Énoncé du problème', type: 'textarea', required: true },
+      { id: 'f2', name: 'rootCause', label: 'Cause racine', type: 'textarea', required: true },
+      { id: 'f3', name: 'correctiveAction', label: 'Action corrective', type: 'textarea', required: true },
+      { id: 'f4', name: 'dueDate', label: 'Échéance', type: 'date', required: true },
+    ],
+    isActive: true, status: 'Approved', moduleType: 'capa',
+    workflow: { type: 'sequential', approvers: [{ role: 'quality_manager', order: 1 }, { role: 'admin', order: 2 }], eSignatureRequired: true, lockAfterSubmission: true },
+    compliance: { auditTrailEnabled: true, printFriendlyLayout: true, cfrPart11Compliance: true },
+    signatures: [{
+      id: 'sig_demo_1', recordId: 'ft_capa_v1', recordType: 'form_template',
+      signedById: 'u_qm', signerName: 'Pierre Dubois', signerRole: 'quality_manager',
+      signatureType: 'approval', signatureHash: 'SIG-DEMO-CAPA-TEMPLATE', revoked: false, createdAt: now(),
+    }],
+    currentApprovalStep: 2, effectiveDate: now(),
+    organizationId: orgId, createdById: 'u_qm', createdAt: now(), updatedAt: now(),
+  }
+  const ncrTemplate: any = {
+    id: 'ft_ncr_v1', title: 'Template NCR (Standard)', version: '1.0',
+    description: 'Template standard pour les non-conformités',
+    fields: [
+      { id: 'f1', name: 'description', label: 'Description de la non-conformité', type: 'textarea', required: true },
+      { id: 'f2', name: 'lotNumber', label: 'N° Lot', type: 'text' },
+      { id: 'f3', name: 'severity', label: 'Sévérité', type: 'select', options: ['Critical', 'Major', 'Minor'], required: true },
+      { id: 'f4', name: 'disposition', label: 'Disposition', type: 'select', options: ['Use As Is', 'Rework', 'Scrap', 'Return to Supplier', 'Concession', 'Pending'] },
+    ],
+    isActive: true, status: 'Approved', moduleType: 'ncr',
+    workflow: { type: 'single', approvers: [{ role: 'quality_manager', order: 1 }], eSignatureRequired: true, lockAfterSubmission: false },
+    compliance: { auditTrailEnabled: true, printFriendlyLayout: true, cfrPart11Compliance: true },
+    signatures: [{
+      id: 'sig_demo_2', recordId: 'ft_ncr_v1', recordType: 'form_template',
+      signedById: 'u_qm', signerName: 'Pierre Dubois', signerRole: 'quality_manager',
+      signatureType: 'approval', signatureHash: 'SIG-DEMO-NCR-TEMPLATE', revoked: false, createdAt: now(),
+    }],
+    currentApprovalStep: 1, effectiveDate: now(),
+    organizationId: orgId, createdById: 'u_qm', createdAt: now(), updatedAt: now(),
+  }
+  const deviationTemplateDraft: any = {
+    id: 'ft_dev_v1', title: 'Template Déviation (Brouillon)', version: '0.1',
+    description: 'Template en cours d\'élaboration pour les déviations',
+    fields: [
+      { id: 'f1', name: 'description', label: 'Description', type: 'textarea', required: true },
+      { id: 'f2', name: 'justification', label: 'Justification', type: 'textarea' },
+    ],
+    isActive: true, status: 'Draft', moduleType: 'deviation',
+    workflow: { type: 'sequential', approvers: [{ role: 'quality_manager', order: 1 }], eSignatureRequired: false, lockAfterSubmission: false },
+    signatures: [], currentApprovalStep: 0,
+    organizationId: orgId, createdById: 'u_qm', createdAt: now(), updatedAt: now(),
+  }
+  setInternal({ formTemplates: [capaTemplate, ncrTemplate, deviationTemplateDraft] })
+
+  // Seed a form instance (Layer 2) — approved CAPA instance
+  const capaInstance: any = {
+    id: 'fi_capa_demo_1', templateId: 'ft_capa_v1', templateVersion: '1.0',
+    referenceNumber: 'CAPA-FORM-001',
+    values: {
+      problemStatement: 'Démo : problème identifié lors de l\'audit',
+      rootCause: 'Démo : cause racine analyse',
+      correctiveAction: 'Démo : action corrective mise en place',
+      dueDate: '2024-12-31',
+    },
+    status: 'Approved', isLocked: true,
+    submittedById: 'u_qm', submittedAt: now(),
+    signatureHash: 'SIG-INSTANCE-DEMO',
+    signatures: [{
+      id: 'sig_inst_1', recordId: 'fi_capa_demo_1', recordType: 'form_instance',
+      signedById: 'u_admin', signerName: 'Sophie Martin', signerRole: 'admin',
+      signatureType: 'approval', signatureHash: 'SIG-INSTANCE-DEMO', revoked: false, createdAt: now(),
+    }],
+    currentApprovalStep: 2,
+    approvalHistory: [
+      { step: 1, approverId: 'u_qm', approverName: 'Pierre Dubois', approverRole: 'quality_manager', decision: 'Approved', comment: 'Conforme', signatureHash: 'SIG-STEP1', timestamp: now() },
+      { step: 2, approverId: 'u_admin', approverName: 'Sophie Martin', approverRole: 'admin', decision: 'Approved', comment: 'Approuvé', signatureHash: 'SIG-STEP2', timestamp: now() },
+    ],
+    recordTypeSlug: 'capa',
+    organizationId: orgId, createdById: 'u_qm', createdAt: now(), updatedAt: now(),
+  }
+  const ncrInstanceDraft: any = {
+    id: 'fi_ncr_demo_1', templateId: 'ft_ncr_v1', templateVersion: '1.0',
+    referenceNumber: 'NCR-FORM-001',
+    values: { description: 'Démo NCR en cours de saisie', lotNumber: 'LOT-DEMO-001', severity: 'Minor' },
+    status: 'Draft', isLocked: false,
+    signatures: [], currentApprovalStep: 0, approvalHistory: [],
+    recordTypeSlug: 'ncr',
+    organizationId: orgId, createdById: 'u_op', createdAt: now(), updatedAt: now(),
+  }
+  setInternal({ formInstances: [capaInstance, ncrInstanceDraft] })
+
+  // Seed scheduled reports
+  const scheduledReports: any[] = [
+    {
+      id: 'sr_1', name: 'Rapport mensuel CAPA', reportType: 'capa_summary', format: 'pdf',
+      frequency: 'monthly', recipientsJson: JSON.stringify(['quality@mediquality.fr', 'admin@mediquality.fr']),
+      filtersJson: JSON.stringify({}), status: 'active',
+      lastRunAt: new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString(),
+      nextRunAt: new Date(Date.now() + 23 * 24 * 3600 * 1000).toISOString(),
+      lastResult: 'success: 12 enregistrements',
+      organizationId: orgId, createdAt: now(), updatedAt: now(),
+    },
+    {
+      id: 'sr_2', name: 'Revue trimestrielle direction', reportType: 'management_review', format: 'pdf',
+      frequency: 'quarterly', recipientsJson: JSON.stringify(['admin@mediquality.fr']),
+      filtersJson: JSON.stringify({}), status: 'active',
+      lastRunAt: null, nextRunAt: new Date(Date.now() + 45 * 24 * 3600 * 1000).toISOString(),
+      lastResult: null,
+      organizationId: orgId, createdAt: now(), updatedAt: now(),
+    },
+    {
+      id: 'sr_3', name: 'Statut formations hebdomadaire', reportType: 'training_status', format: 'csv',
+      frequency: 'weekly', recipientsJson: JSON.stringify(['quality@mediquality.fr']),
+      filtersJson: JSON.stringify({}), status: 'paused',
+      lastRunAt: new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString(),
+      nextRunAt: null, lastResult: 'success: 5 enregistrements',
+      organizationId: orgId, createdAt: now(), updatedAt: now(),
+    },
+  ]
+  setInternal({ scheduledReports })
 
   console.log('[QMS] Demo data seeded successfully')
 }
