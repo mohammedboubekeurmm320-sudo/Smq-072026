@@ -1,0 +1,258 @@
+// QMS ISO 13485 - Prisma schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  city        String?
+  country     String?
+  type        String   @default("manufacturer") // manufacturer, distributor, service provider...
+  contactEmail String?
+  contactPhone String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  documents   Document[]
+  risks       Risk[]
+  audits      Audit[]
+  nonconformities Nonconformity[]
+  capas       CAPA[]
+  trainings   Training[]
+  suppliers   Supplier[]
+  processes   Process[]
+  standards   OrganizationStandard[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           String   @default("VIEWER") // SUPER_ADMIN, ADMIN, QUALITY_MANAGER, ENGINEER, AUDITOR, VIEWER
+  position       String?
+  department     String?
+  active         Boolean  @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  documentsOwned    Document[]    @relation("DocumentOwner")
+  documentsReviewed Document[]    @relation("DocumentReviewer")
+  documentsApproved Document[]    @relation("DocumentApprover")
+  auditsLed         Audit[]       @relation("AuditLeadAuditor")
+  trainings         Training[]
+  risksOwned        Risk[]        @relation("RiskOwner")
+  nonconformitiesOwned Nonconformity[] @relation("NcOwner")
+  capasOwned        CAPA[]        @relation("CapaOwner")
+  processesOwned    Process[]     @relation("ProcessOwner")
+  sessions          Session[]
+}
+
+model Standard {
+  id          String   @id @default(cuid())
+  code        String   @unique // ISO 13485, ISO 14971, ISO 9001, ISO 14001...
+  name        String
+  version     String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizations OrganizationStandard[]
+}
+
+model OrganizationStandard {
+  organizationId String
+  standardId     String
+  certified      Boolean  @default(false)
+  certifiedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  standard       Standard     @relation(fields: [standardId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, standardId])
+}
+
+model Document {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String   // e.g. QMS-DOC-001
+  title          String
+  version        String   @default("1.0")
+  status         String   @default("DRAFT") // DRAFT, IN_REVIEW, APPROVED, OBSOLETE
+  category       String   @default("procedure") // procedure, instruction, record, manual, form, policy
+  content        String?
+  summary        String?
+  ownerId        String?
+  reviewerId     String?
+  approverId     String?
+  effectiveDate  DateTime?
+  nextReviewDate DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?        @relation("DocumentOwner", fields: [ownerId], references: [id])
+  reviewer       User?        @relation("DocumentReviewer", fields: [reviewerId], references: [id])
+  approver       User?        @relation("DocumentApprover", fields: [approverId], references: [id])
+
+  @@unique([organizationId, code])
+}
+
+model Risk {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  process        String?
+  hazard         String?
+  severity       Int      @default(5)  // 1-5
+  probability    Int      @default(5)  // 1-5
+  detectability  Int      @default(5)  // 1-5
+  rpn            Int      @default(125) // S*P*D
+  mitigation     String?
+  status         String   @default("IDENTIFIED") // IDENTIFIED, ANALYZED, MITIGATED, CLOSED
+  ownerId        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?        @relation("RiskOwner", fields: [ownerId], references: [id])
+}
+
+model Audit {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  type           String   @default("internal") // internal, external, supplier
+  scope          String?
+  plannedDate    DateTime?
+  conductedDate  DateTime?
+  status         String   @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED, CANCELLED
+  findings       String?
+  conclusion     String?
+  leadAuditorId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadAuditor    User?        @relation("AuditLeadAuditor", fields: [leadAuditorId], references: [id])
+}
+
+model Nonconformity {
+  id             String   @id @default(cuid())
+  organizationId String
+  reference      String
+  title          String
+  description    String?
+  source         String   @default("internal_audit") // internal_audit, external_audit, customer_complaint, supplier, process
+  severity       String   @default("minor") // minor, major, critical
+  status         String   @default("OPEN") // OPEN, INVESTIGATION, ACTION, CLOSED
+  ownerId        String?
+  detectedDate   DateTime @default(now())
+  closedDate     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?        @relation("NcOwner", fields: [ownerId], references: [id])
+  capas          CAPA[]
+}
+
+model CAPA {
+  id                String   @id @default(cuid())
+  organizationId    String
+  reference         String
+  type              String   @default("CORRECTIVE") // CORRECTIVE, PREVENTIVE
+  title             String
+  description       String?
+  rootCause         String?
+  action            String?
+  dueDate           DateTime?
+  completedDate     DateTime?
+  status            String   @default("OPEN") // OPEN, IN_PROGRESS, COMPLETED, VERIFIED
+  ownerId           String?
+  nonconformityId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner             User?           @relation("CapaOwner", fields: [ownerId], references: [id])
+  nonconformity     Nonconformity?  @relation(fields: [nonconformityId], references: [id])
+}
+
+model Training {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  name           String
+  description    String?
+  category       String   @default("quality") // quality, technical, regulatory, safety
+  conductedDate  DateTime?
+  completedDate  DateTime?
+  status         String   @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED
+  score          Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Supplier {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  contactName    String?
+  email          String?
+  phone          String?
+  category       String?  // raw material, service, equipment...
+  evaluation     String   @default("PENDING") // PENDING, APPROVED, CONDITIONAL, REJECTED
+  evaluationDate DateTime?
+  riskLevel      String   @default("medium") // low, medium, high
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Process {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  type           String   @default("core") // core, support, management
+  ownerId        String?
+  inputs         String?
+  outputs        String?
+  kpi            String?
+  status         String   @default("active") // active, inactive
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          User?        @relation("ProcessOwner", fields: [ownerId], references: [id])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
