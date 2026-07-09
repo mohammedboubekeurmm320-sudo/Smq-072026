@@ -1,8 +1,7 @@
 'use client'
-import { useShallow } from 'zustand/react/shallow'
 
 import { useAuth } from '@/contexts/AuthContext'
-import { useQmsStore } from '@/lib/demo-store'
+import { useModule } from '@/hooks/useModule'
 import { ModuleShell, type ModuleConfig } from '@/components/shared/ModuleShell'
 import { Shield, AlertTriangle, AlertOctagon, ArrowLeftRight, ClipboardCheck, BarChart3, GraduationCap, Package, Truck } from 'lucide-react'
 
@@ -52,24 +51,18 @@ const capaConfig: ModuleConfig<any> = {
 
 export function CapaView() {
   const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const capas = useQmsStore(useShallow(s => s.capas)).filter(c => c.organizationId === orgId)
-  const createCapa = useQmsStore(s => s.createCapa)
-  const updateCapa = useQmsStore(s => s.updateCapa)
-  const deleteCapa = useQmsStore(s => s.deleteCapa)
+  const { items, create, update, remove } = useModule('/api/capas')
   return (
     <ModuleShell
       config={capaConfig}
-      records={capas}
-      onCreate={(d) => createCapa(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => updateCapa(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => deleteCapa(orgId, profile?.id || '', id)}
-      onTransition={(id, target, sigHash) => {
+      records={items}
+      onCreate={create}
+      onUpdate={update}
+      onDelete={remove}
+      onTransition={async (id, target, sigHash) => {
         const patch: any = { status: target }
-        if (target === 'Closed' && sigHash) {
-          patch.closedDate = new Date().toISOString()
-        }
-        updateCapa(orgId, profile?.id || '', id, patch)
+        if (target === 'Closed' && sigHash) patch.closedDate = new Date().toISOString()
+        await update(id, patch)
         return { ok: true }
       }}
     />
@@ -119,28 +112,23 @@ const ncrConfig: ModuleConfig<any> = {
 }
 
 export function NcrView() {
+  const { items, create, update, remove } = useModule('/api/ncrs')
   const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const ncrs = useQmsStore(useShallow(s => s.ncrs)).filter(n => n.organizationId === orgId)
-  const createNcr = useQmsStore(s => s.createNcr)
-  const updateNcr = useQmsStore(s => s.updateNcr)
-  const deleteNcr = useQmsStore(s => s.deleteNcr)
   return (
     <ModuleShell
       config={ncrConfig}
-      records={ncrs}
-      onCreate={(d) => createNcr(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => updateNcr(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => deleteNcr(orgId, profile?.id || '', id)}
-      onTransition={(id, target, sigHash) => {
+      records={items}
+      onCreate={create}
+      onUpdate={update}
+      onDelete={remove}
+      onTransition={async (id, target, sigHash) => {
         const patch: any = { status: target }
         if (target === 'Closed' && sigHash) {
-          patch.closedDate = new Date().toISOString()
-          patch.closedSignatureHash = sigHash
           patch.closedSignedAt = new Date().toISOString()
+          patch.closedSignatureHash = sigHash
           patch.closedById = profile?.id
         }
-        updateNcr(orgId, profile?.id || '', id, patch)
+        await update(id, patch)
         return { ok: true }
       }}
     />
@@ -189,29 +177,15 @@ const deviationConfig: ModuleConfig<any> = {
     { name: 'productCode', label: 'Code produit', type: 'text' },
     { name: 'quantityAffected', label: 'Quantité affectée', type: 'text' },
     { name: 'containmentAction', label: 'Action de confinement', type: 'textarea' },
-    { name: 'quarantine', label: 'Quarantaine', type: 'select', options: [{ value: 'true', label: 'Oui' }, { value: 'false', label: 'Non' }] },
-    { name: 'impactOnValidatedState', label: 'Impact sur état validé', type: 'textarea' },
-    { name: 'impactOnRegulatoryFiling', label: 'Impact sur dossier réglementaire', type: 'textarea' },
-    { name: 'detectedDate', label: 'Date de détection', type: 'date' },
     { name: 'dueDate', label: 'Échéance', type: 'date' },
   ],
 }
 
 export function DeviationView() {
-  const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.deviations)).filter(d => d.organizationId === orgId)
-  const create = useQmsStore(s => s.createDeviation)
-  const update = useQmsStore(s => s.updateDeviation)
-  const del = useQmsStore(s => s.deleteDeviation)
+  const { items, create, update, remove } = useModule('/api/deviations')
   return (
-    <ModuleShell
-      config={deviationConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target) => { update(orgId, profile?.id || '', id, { status: target } as any); return { ok: true } }}
+    <ModuleShell config={deviationConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target) => { await update(id, { status: target }); return { ok: true } }}
     />
   )
 }
@@ -251,33 +225,20 @@ const ccConfig: ModuleConfig<any> = {
     { name: 'description', label: 'Description', type: 'textarea' },
     { name: 'justification', label: 'Justification', type: 'textarea' },
     { name: 'proposedChange', label: 'Changement proposé', type: 'textarea' },
-    { name: 'detailedChangeDescription', label: 'Description détaillée', type: 'textarea' },
     { name: 'riskAssessment', label: 'Évaluation des risques', type: 'textarea' },
     { name: 'impactAnalysis', label: 'Analyse d\'impact', type: 'textarea' },
     { name: 'affectedAreas', label: 'Zones affectées', type: 'text' },
     { name: 'implementationPlan', label: 'Plan d\'implémentation', type: 'textarea' },
     { name: 'implementationDate', label: 'Date d\'implémentation', type: 'date' },
-    { name: 'estimatedCostImpact', label: 'Impact coût estimé', type: 'text' },
-    { name: 'regulatoryTrigger', label: 'Déclencheur réglementaire', type: 'text' },
     { name: 'dueDate', label: 'Échéance', type: 'date' },
   ],
 }
 
 export function ChangeControlView() {
-  const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.changeControls)).filter(c => c.organizationId === orgId)
-  const create = useQmsStore(s => s.createChangeControl)
-  const update = useQmsStore(s => s.updateChangeControl)
-  const del = useQmsStore(s => s.deleteChangeControl)
+  const { items, create, update, remove } = useModule('/api/change-controls')
   return (
-    <ModuleShell
-      config={ccConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target) => { update(orgId, profile?.id || '', id, { status: target } as any); return { ok: true } }}
+    <ModuleShell config={ccConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target) => { await update(id, { status: target }); return { ok: true } }}
     />
   )
 }
@@ -309,20 +270,11 @@ const auditConfig: ModuleConfig<any> = {
 }
 
 export function AuditView() {
+  const { items, create, update, remove } = useModule('/api/audits')
   const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.audits)).filter(a => a.organizationId === orgId)
-  const create = useQmsStore(s => s.createAudit)
-  const update = useQmsStore(s => s.updateAudit)
-  const del = useQmsStore(s => s.deleteAudit)
   return (
-    <ModuleShell
-      config={auditConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target, sigHash) => {
+    <ModuleShell config={auditConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target, sigHash) => {
         const patch: any = { status: target }
         if (target === 'Completed' && sigHash) {
           patch.completedDate = new Date().toISOString()
@@ -330,7 +282,7 @@ export function AuditView() {
           patch.completedSignedAt = new Date().toISOString()
           patch.completedSignedById = profile?.id
         }
-        update(orgId, profile?.id || '', id, patch)
+        await update(id, patch)
         return { ok: true }
       }}
     />
@@ -382,20 +334,10 @@ const riskConfig: ModuleConfig<any> = {
 }
 
 export function RiskView() {
-  const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.risks)).filter(r => r.organizationId === orgId)
-  const create = useQmsStore(s => s.createRisk)
-  const update = useQmsStore(s => s.updateRisk)
-  const del = useQmsStore(s => s.deleteRisk)
+  const { items, create, update, remove } = useModule('/api/risks')
   return (
-    <ModuleShell
-      config={riskConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target) => { update(orgId, profile?.id || '', id, { status: target } as any); return { ok: true } }}
+    <ModuleShell config={riskConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target) => { await update(id, { status: target }); return { ok: true } }}
     />
   )
 }
@@ -431,23 +373,13 @@ const trainingConfig: ModuleConfig<any> = {
 }
 
 export function TrainingView() {
-  const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.trainings)).filter(t => t.organizationId === orgId)
-  const create = useQmsStore(s => s.createTraining)
-  const update = useQmsStore(s => s.updateTraining)
-  const del = useQmsStore(s => s.deleteTraining)
+  const { items, create, update, remove } = useModule('/api/training')
   return (
-    <ModuleShell
-      config={trainingConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target) => {
+    <ModuleShell config={trainingConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target) => {
         const patch: any = { status: target }
         if (target === 'Completed') patch.completedDate = new Date().toISOString()
-        update(orgId, profile?.id || '', id, patch)
+        await update(id, patch)
         return { ok: true }
       }}
     />
@@ -482,27 +414,18 @@ const batchConfig: ModuleConfig<any> = {
 }
 
 export function BatchRecordView() {
+  const { items, create, update, remove } = useModule('/api/batch-records')
   const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.batchRecords)).filter(b => b.organizationId === orgId)
-  const create = useQmsStore(s => s.createBatchRecord)
-  const update = useQmsStore(s => s.updateBatchRecord)
-  const del = useQmsStore(s => s.deleteBatchRecord)
   return (
-    <ModuleShell
-      config={batchConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target, sigHash) => {
+    <ModuleShell config={batchConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target, sigHash) => {
         const patch: any = { status: target }
         if (target === 'Released' && sigHash) {
           patch.qaReleaseDate = new Date().toISOString()
           patch.qaReleasedById = profile?.id
           patch.isLocked = true
         }
-        update(orgId, profile?.id || '', id, patch)
+        await update(id, patch)
         return { ok: true }
       }}
     />
@@ -554,20 +477,10 @@ const supplierConfig: ModuleConfig<any> = {
 }
 
 export function SupplierView() {
-  const { profile } = useAuth()
-  const orgId = profile?.organizationId || ''
-  const items = useQmsStore(useShallow(s => s.suppliers)).filter(s => s.organizationId === orgId)
-  const create = useQmsStore(s => s.createSupplier)
-  const update = useQmsStore(s => s.updateSupplier)
-  const del = useQmsStore(s => s.deleteSupplier)
+  const { items, create, update, remove } = useModule('/api/suppliers')
   return (
-    <ModuleShell
-      config={supplierConfig}
-      records={items}
-      onCreate={(d) => create(orgId, profile?.id || '', d)}
-      onUpdate={(id, p) => update(orgId, profile?.id || '', id, p) as any}
-      onDelete={(id) => del(orgId, profile?.id || '', id)}
-      onTransition={(id, target) => { update(orgId, profile?.id || '', id, { status: target } as any); return { ok: true } }}
+    <ModuleShell config={supplierConfig} records={items} onCreate={create} onUpdate={update} onDelete={remove}
+      onTransition={async (id, target) => { await update(id, { status: target }); return { ok: true } }}
     />
   )
 }

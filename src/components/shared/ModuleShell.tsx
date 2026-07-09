@@ -48,10 +48,10 @@ export interface ModuleConfig<T> {
 interface Props<T extends { id: string; organizationId: string }> {
   config: ModuleConfig<T>
   records: T[]
-  onCreate: (data: Partial<T>) => T
-  onUpdate: (id: string, patch: Partial<T>) => void
-  onDelete: (id: string) => void
-  onTransition?: (id: string, target: string, signatureHash?: string) => { ok: boolean; error?: string }
+  onCreate: (data: Partial<T>) => T | Promise<T>
+  onUpdate: (id: string, patch: Partial<T>) => void | Promise<void>
+  onDelete: (id: string) => void | Promise<void>
+  onTransition?: (id: string, target: string, signatureHash?: string) => { ok: boolean; error?: string } | Promise<{ ok: boolean; error?: string }>
 }
 
 export function ModuleShell<T extends { id: string; organizationId: string; [k: string]: any }>({
