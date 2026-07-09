@@ -19,6 +19,7 @@ import { DOCUMENT_LEVEL_LABELS, type DocumentLevel } from '@/types/qms'
 import { validateDocumentCode, getCodePrefix, CODE_PREFIXES } from '@/lib/document-code-convention'
 import { DEPARTMENTS } from '@/lib/department-taxonomy'
 import { RecordLinkPanel } from '@/components/shared/RecordLinkPanel'
+import { DocumentTriggersPanel, DocumentRelationshipsPanel } from '@/components/modules/DocumentRelations'
 import { fmtDate } from '@/lib/ui-labels'
 
 const DOC_TYPES = ['MANUEL', 'POLITIQUE', 'PROCEDURE', 'INSTRUCTION', 'FORMULAIRE', 'REGISTRE', 'ENREGISTREMENT', 'MASTER_BATCH', 'SOP', 'WI', 'Specification']
@@ -162,7 +163,7 @@ export function DocumentControlView() {
       )}
 
       {viewing && !showForm && (
-        <DocumentViewDialog doc={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); setShowForm(true) }} canEdit={canEdit} />
+        <DocumentViewDialog doc={viewing} allDocs={docs} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); setShowForm(true) }} canEdit={canEdit} />
       )}
     </div>
   )
@@ -342,7 +343,7 @@ function DocumentForm({ doc, orgId, userId, existingCodes, onClose, onSave }: an
   )
 }
 
-function DocumentViewDialog({ doc, onClose, onEdit, canEdit }: any) {
+function DocumentViewDialog({ doc, allDocs, onClose, onEdit, canEdit }: any) {
   const handleDownload = () => {
     const content = `# ${doc.title}\n\nN°: ${doc.documentNumber}\nVersion: ${doc.version}\nStatut: ${doc.status}\nType: ${doc.docType}\nNiveau: N${doc.documentLevel}\nCode: ${doc.code || '—'}\nClause ISO: ${doc.isoClause || '—'}\n\n## Résumé\n${doc.summary || ''}\n\n## Contenu\n${doc.content || ''}\n`
     const blob = new Blob([content], { type: 'text/markdown' })
@@ -373,6 +374,8 @@ function DocumentViewDialog({ doc, onClose, onEdit, canEdit }: any) {
           <TabsList>
             <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
             <TabsTrigger value="content">Contenu</TabsTrigger>
+            <TabsTrigger value="triggers">Triggers</TabsTrigger>
+            <TabsTrigger value="relations">Relations</TabsTrigger>
             <TabsTrigger value="links">Liens</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="mt-4">
@@ -401,6 +404,12 @@ function DocumentViewDialog({ doc, onClose, onEdit, canEdit }: any) {
             {doc.content ? (
               <pre className="text-sm whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-4 rounded border">{doc.content}</pre>
             ) : <p className="text-sm text-muted-foreground">Aucun contenu</p>}
+          </TabsContent>
+          <TabsContent value="triggers" className="mt-4">
+            <DocumentTriggersPanel document={doc} allDocuments={allDocs} />
+          </TabsContent>
+          <TabsContent value="relations" className="mt-4">
+            <DocumentRelationshipsPanel document={doc} allDocuments={allDocs} />
           </TabsContent>
           <TabsContent value="links" className="mt-4">
             <RecordLinkPanel recordId={doc.id} recordType="document" recordLabel={`${doc.documentNumber} — ${doc.title}`} />

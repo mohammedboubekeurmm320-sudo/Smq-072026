@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import { SetupWizard } from '@/components/setup/SetupWizard'
 import { Login } from '@/components/auth/Login'
+import { useI18n } from '@/contexts/I18nContext'
+import { Globe } from 'lucide-react'
 
 interface NavItem {
   id: ActiveSection
@@ -56,6 +58,7 @@ const GROUPS = ['Pilotage', 'Gouvernance Documentaire', 'Qualité & Amélioratio
 
 export function AppShell({ children }: { children: React.ReactNode | ((props: { active: ActiveSection; setActive: (s: ActiveSection) => void }) => React.ReactNode) }) {
   const { profile, organization, loading, logout, hasRole, user } = useAuth()
+  const i18n = useI18n()
   const [active, setActive] = useState<ActiveSection>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -147,6 +150,17 @@ export function AppShell({ children }: { children: React.ReactNode | ((props: { 
       </nav>
 
       <div className="p-3 border-t">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <button
+            onClick={() => i18n.setLocale(i18n.locale === 'fr' ? 'en' : 'fr')}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-muted-foreground"
+          >
+            <Globe className="h-3.5 w-3.5" />
+            <span>{i18n.locale === 'fr' ? 'FR' : 'EN'}</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-slate-400">{i18n.locale === 'fr' ? 'EN' : 'FR'}</span>
+          </button>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">

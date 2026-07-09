@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
@@ -427,52 +428,304 @@ export function AuditTrailView() {
 }
 
 // ============================================================================
-// Record Types View (admin only)
+// Record Types View (admin only) — with custom type creation
 // ============================================================================
 export function RecordTypesView() {
-  const { profile } = useAuth()
+  const { profile, hasPermission } = useAuth()
   const orgId = profile?.organizationId || ''
   const recordTypes = useQmsStore(useShallow(s => s.recordTypeDefinitions)).filter(r => r.organizationId === orgId)
+  const createRecordType = useQmsStore(s => s.createRecordType)
+  const deleteRecordType = useQmsStore(s => s.deleteRecordType)
   const { toast } = useToast()
+  const [showForm, setShowForm] = useState(false)
+  const [viewing, setViewing] = useState<any | null>(null)
+
+  const canCreate = hasPermission('recordtypes.create' as any)
+  const canDelete = hasPermission('recordtypes.delete' as any)
+
+  const systemTypes = recordTypes.filter(r => r.isSystem)
+  const customTypes = recordTypes.filter(r => !r.isSystem)
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2"><Layers className="h-6 w-6 text-emerald-600" /> Types d'Enregistrements</h1>
-        <p className="text-sm text-muted-foreground">Système extensible de types d'enregistrements (10 système + custom)</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><Layers className="h-6 w-6 text-emerald-600" /> Types d'Enregistrements</h1>
+          <p className="text-sm text-muted-foreground">Système extensible : {systemTypes.length} types système + {customTypes.length} types custom</p>
+        </div>
+        {canCreate && <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4 mr-2" /> Nouveau type</Button>}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {recordTypes.map(rt => (
-          <Card key={rt.id}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <Badge variant="outline" className="font-mono">{rt.slug}</Badge>
-                    {rt.isSystem && <Badge variant="secondary" className="text-xs">Système</Badge>}
-                    {!rt.isActive && <Badge variant="outline" className="text-xs">Inactif</Badge>}
-                    {rt.requiresEsig && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">E-sig requise</Badge>}
-                  </div>
-                  <h3 className="font-medium">{rt.name}</h3>
-                  {rt.description && <p className="text-sm text-muted-foreground">{rt.description}</p>}
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {rt.statusFlow.length} statuts · {rt.complianceRefs.length} réf. conformité · v{rt.version}
-                  </div>
-                  {rt.complianceRefs.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {rt.complianceRefs.slice(0, 3).map((c, i) => (
-                        <Badge key={i} variant="outline" className="text-xs">{c.standard} {c.clause}</Badge>
-                      ))}
+      {/* System types */}
+      <div>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Types système ({systemTypes.length})</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          {systemTypes.map(rt => (
+            <Card key={rt.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setViewing(rt)}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <Badge variant="outline" className="font-mono">{rt.slug}</Badge>
+                      <Badge variant="secondary" className="text-xs">Système</Badge>
+                      {!rt.isActive && <Badge variant="outline" className="text-xs">Inactif</Badge>}
+                      {rt.requiresEsig && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">E-sig</Badge>}
                     </div>
-                  )}
+                    <h3 className="font-medium">{rt.name}</h3>
+                    {rt.description && <p className="text-sm text-muted-foreground line-clamp-2">{rt.description}</p>}
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      {rt.statusFlow.length} statuts · {rt.complianceRefs.length} réf. conformité · v{rt.version}
+                    </div>
+                    {rt.complianceRefs.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {rt.complianceRefs.slice(0, 3).map((c: any, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">{c.standard} {c.clause}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
+
+      {/* Custom types */}
+      {customTypes.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Types custom ({customTypes.length})</h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {customTypes.map(rt => (
+              <Card key={rt.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setViewing(rt)}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Badge variant="outline" className="font-mono">{rt.slug}</Badge>
+                        <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">Custom</Badge>
+                        {rt.codePrefix && <Badge variant="outline" className="text-xs font-mono">{rt.codePrefix}-</Badge>}
+                        {rt.requiresEsig && <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">E-sig</Badge>}
+                      </div>
+                      <h3 className="font-medium">{rt.name}</h3>
+                      {rt.description && <p className="text-sm text-muted-foreground line-clamp-2">{rt.description}</p>}
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {rt.statusFlow.length} statuts · {rt.complianceRefs.length} réf. conformité
+                      </div>
+                      {rt.complianceRefs.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {rt.complianceRefs.slice(0, 3).map((c: any, i: number) => (
+                            <Badge key={i} variant="outline" className="text-xs">{c.standard} {c.clause}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {canDelete && (
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ce type custom ?')) { const r = deleteRecordType(orgId, profile?.id || '', rt.id); if (!r.ok) toast({ title: r.error || 'Erreur', variant: 'destructive' }); else toast({ title: 'Type supprimé' }) } }}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <RecordTypeForm
+          onClose={() => setShowForm(false)}
+          onSave={(data) => {
+            const r = createRecordType(orgId, profile?.id || '', data)
+            if (r.ok) { toast({ title: 'Type custom créé' }); setShowForm(false) }
+            else toast({ title: r.error || 'Erreur', variant: 'destructive' })
+          }}
+        />
+      )}
+
+      {viewing && (
+        <RecordTypeDetailDialog
+          recordType={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function RecordTypeForm({ onClose, onSave }: { onClose: () => void; onSave: (data: any) => void }) {
+  const [form, setForm] = useState({
+    slug: '',
+    name: '',
+    description: '',
+    codePrefix: '',
+    requiresEsig: false,
+    minApproverCount: 1,
+    statuses: ['Open', 'Under Review', 'Closed'] as string[],
+    newStatus: '',
+    complianceRefs: [
+      { standard: 'ISO 13485', clause: '4.1', description: 'Exigences générales' },
+    ] as { standard: string; clause: string; description?: string }[],
+  })
+  const [error, setError] = useState('')
+
+  const addStatus = () => {
+    if (form.newStatus && !form.statuses.includes(form.newStatus)) {
+      setForm({ ...form, statuses: [...form.statuses, form.newStatus], newStatus: '' })
+    }
+  }
+  const removeStatus = (s: string) => setForm({ ...form, statuses: form.statuses.filter(x => x !== s) })
+
+  const addCompliance = () => setForm({ ...form, complianceRefs: [...form.complianceRefs, { standard: 'ISO 13485', clause: '', description: '' }] })
+  const removeCompliance = (i: number) => setForm({ ...form, complianceRefs: form.complianceRefs.filter((_, j) => j !== i) })
+
+  const handleSave = () => {
+    setError('')
+    if (!form.slug) { setError('Slug requis'); return }
+    if (!/^[a-z][a-z0-9_]*$/.test(form.slug)) { setError('Slug invalide (minuscules, chiffres, _)'); return }
+    if (form.statuses.length === 0) { setError('Au moins 1 statut requis'); return }
+    if (form.complianceRefs.length === 0) { setError('Au moins 1 référence de conformité requise'); return }
+    onSave({
+      slug: form.slug,
+      name: form.name || form.slug,
+      description: form.description,
+      codePrefix: form.codePrefix || undefined,
+      requiresEsig: form.requiresEsig,
+      minApproverCount: form.minApproverCount,
+      statusFlow: form.statuses.map((s, i) => ({ status: s, label: s, requiresESignature: form.requiresEsig && i === form.statuses.length - 1 })),
+      defaultFields: [],
+      complianceRefs: form.complianceRefs.filter(c => c.standard && c.clause),
+    })
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Nouveau type d'enregistrement custom</DialogTitle>
+          <DialogDescription>Créez un type d'enregistrement personnalisé extensible</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 py-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Slug *</Label>
+              <Input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} placeholder="mon_type_custom" className="font-mono" />
+              <div className="text-xs text-muted-foreground mt-1">Minuscules, chiffres, _ uniquement</div>
+            </div>
+            <div><Label>Nom</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Mon Type Custom" /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Préfixe de code</Label><Input value={form.codePrefix} onChange={e => setForm({ ...form, codePrefix: e.target.value })} placeholder="CUS" className="font-mono" /></div>
+            <div><Label>Nb minimum d'approbateurs</Label><Input type="number" min="1" value={form.minApproverCount} onChange={e => setForm({ ...form, minApproverCount: Number(e.target.value) })} /></div>
+          </div>
+          <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2} /></div>
+
+          {/* Workflow / Statuses */}
+          <div className="border-t pt-3">
+            <div className="text-sm font-medium mb-2">Workflow (statuts)</div>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {form.statuses.map(s => (
+                <Badge key={s} variant="secondary" className="text-xs">{s} <button onClick={() => removeStatus(s)} className="ml-1">×</button></Badge>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input value={form.newStatus} onChange={e => setForm({ ...form, newStatus: e.target.value })} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addStatus())} placeholder="Nouveau statut…" />
+              <Button size="sm" onClick={addStatus}><Plus className="h-4 w-4" /></Button>
+            </div>
+            <label className="flex items-center gap-2 mt-2 text-sm">
+              <input type="checkbox" checked={form.requiresEsig} onChange={e => setForm({ ...form, requiresEsig: e.target.checked })} />
+              Signature électronique requise sur le statut terminal
+            </label>
+          </div>
+
+          {/* Compliance refs */}
+          <div className="border-t pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-medium">Références de conformité *</div>
+              <Button size="sm" variant="outline" onClick={addCompliance}><Plus className="h-3 w-3 mr-1" /> Ajouter</Button>
+            </div>
+            <div className="space-y-2">
+              {form.complianceRefs.map((c, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <Select value={c.standard} onValueChange={v => { const arr = [...form.complianceRefs]; arr[i] = { ...arr[i], standard: v }; setForm({ ...form, complianceRefs: arr }) }}>
+                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ISO 13485">ISO 13485</SelectItem>
+                      <SelectItem value="ISO 14971">ISO 14971</SelectItem>
+                      <SelectItem value="ICH Q10">ICH Q10</SelectItem>
+                      <SelectItem value="IVDR EU 2017/746">IVDR EU 2017/746</SelectItem>
+                      <SelectItem value="FDA 21 CFR 820">FDA 21 CFR 820</SelectItem>
+                      <SelectItem value="FDA 21 CFR Part 11">FDA 21 CFR Part 11</SelectItem>
+                      <SelectItem value="IEC 62304">IEC 62304</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input placeholder="Clause (ex. 4.2.3)" value={c.clause} onChange={e => { const arr = [...form.complianceRefs]; arr[i] = { ...arr[i], clause: e.target.value }; setForm({ ...form, complianceRefs: arr }) }} className="flex-1" />
+                  <Button size="sm" variant="ghost" onClick={() => removeCompliance(i)}><Trash2 className="h-3 w-3 text-red-500" /></Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {error && <div className="text-sm text-red-600">{error}</div>}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Annuler</Button>
+          <Button onClick={handleSave}>Créer le type</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RecordTypeDetailDialog({ recordType, onClose }: { recordType: any; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <Layers className="h-5 w-5" />
+            {recordType.name}
+            <Badge variant="outline" className="font-mono">{recordType.slug}</Badge>
+            {recordType.isSystem && <Badge variant="secondary">Système</Badge>}
+          </DialogTitle>
+          <DialogDescription>{recordType.description || '—'}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Préfixe de code:</span> {recordType.codePrefix || '—'}</div>
+            <div><span className="text-muted-foreground">Version:</span> {recordType.version}</div>
+            <div><span className="text-muted-foreground">E-sig requise:</span> {recordType.requiresEsig ? 'Oui' : 'Non'}</div>
+            <div><span className="text-muted-foreground">Min approbateurs:</span> {recordType.minApproverCount}</div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-medium mb-2">Workflow ({recordType.statusFlow.length} statuts)</h4>
+            <div className="flex flex-wrap gap-1">
+              {recordType.statusFlow.map((s: any, i: number) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  {i + 1}. {s.status}
+                  {s.requiresESignature && <span className="ml-1 text-amber-600">🔒</span>}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-medium mb-2">Références de conformité ({recordType.complianceRefs.length})</h4>
+            <div className="space-y-1">
+              {recordType.complianceRefs.map((c: any, i: number) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <Badge variant="outline" className="text-xs">{c.standard}</Badge>
+                  <Badge variant="secondary" className="text-xs font-mono">{c.clause}</Badge>
+                  {c.description && <span className="text-xs text-muted-foreground">{c.description}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
