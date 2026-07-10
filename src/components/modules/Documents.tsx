@@ -285,10 +285,10 @@ function DocumentForm({ doc, orgId, userId, existingCodes, onClose, onSave }: an
             </div>
             <div>
               <Label>Phase de validation</Label>
-              <Select value={form.validationPhase} onValueChange={v => setForm({ ...form, validationPhase: v })}>
+              <Select value={form.validationPhase || '_none'} onValueChange={v => setForm({ ...form, validationPhase: v === '_none' ? '' : v })}>
                 <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Aucune</SelectItem>
+                  <SelectItem value="_none">Aucune</SelectItem>
                   {VALIDATION_PHASES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                 </SelectContent>
               </Select>
