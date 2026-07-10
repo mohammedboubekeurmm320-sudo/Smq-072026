@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -16,10 +16,10 @@ model Organization {
   id                 String   @id @default(cuid())
   name               String
   slug               String   @unique
-  subscriptionStatus String   @default("trial") // trial/active/suspended/cancelled
+  subscriptionStatus String   @default("trial")  @map("subscription_status") // trial/active/suspended/cancelled
   settings           String   @default("{}") // JSONB OrgSettings
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())  @map("created_at")
+  updatedAt          DateTime @updatedAt  @map("updated_at")
 
   members            OrganizationMember[]
   profiles           Profile[]
@@ -46,23 +46,24 @@ model Organization {
   documentRelationships DocumentRelationship[]
   documentCodeSequences DocumentCodeSequence[]
   scheduledReports   ScheduledReport[]
+  @@map("organizations")
 }
 
 model Profile {
   id             String   @id @default(cuid())
   email          String   @unique
-  fullName       String
+  fullName       String  @map("full_name")
   role           String   @default("operator") // admin/quality_manager/auditor/document_controller/executive/operator
   department     String?
-  jobTitle       String?
+  jobTitle       String?  @map("job_title")
   phone          String?
-  avatarUrl      String?
-  passwordHash   String
-  organizationId String
+  avatarUrl      String?  @map("avatar_url")
+  passwordHash   String  @map("password_hash")
+  organizationId String  @map("organization_id")
   active         Boolean  @default(true)
-  lastLoginAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  lastLoginAt    DateTime?  @map("last_login_at")
+  createdAt      DateTime @default(now())  @map("created_at")
+  updatedAt      DateTime @updatedAt  @map("updated_at")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   memberships    OrganizationMember[]
@@ -86,31 +87,34 @@ model Profile {
   signatures           ElectronicSignature[] @relation("Signatures")
   auditTrails          AuditTrail[]
   sessions             Session[]
+  @@map("profiles")
 }
 
 model OrganizationMember {
   id             String   @id @default(cuid())
-  organizationId String
-  profileId      String
+  organizationId String  @map("organization_id")
+  profileId      String  @map("profile_id")
   role           String   @default("member") // owner/admin/member/viewer
   status         String   @default("active") // active/inactive/pending
-  invitedById    String?
-  createdAt      DateTime @default(now())
+  invitedById    String?  @map("invited_by_id")
+  createdAt      DateTime @default(now())  @map("created_at")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   profile        Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, profileId])
+  @@map("organization_members")
 }
 
 model Session {
   id        String   @id @default(cuid())
   token     String   @unique
-  profileId String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  profileId String  @map("profile_id")
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime @default(now())  @map("created_at")
 
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  @@map("sessions")
 }
 
 // ============================================================================
@@ -120,54 +124,55 @@ model Session {
 model Department {
   id             String   @id @default(cuid())
   code           String   @unique
-  labelFr        String
-  labelEn        String
+  labelFr        String  @map("label_fr")
+  labelEn        String  @map("label_en")
   category       String   // strategique/transversal/qc_lab/production/rd/utilities/maintenance/hse/supply_chain/commercial/finance/it/quality/regulatory/audit/other
-  parentCode     String?
-  isActive       Boolean  @default(true)
-  organizationId String?
-  createdAt      DateTime @default(now())
+  parentCode     String?  @map("parent_code")
+  isActive       Boolean  @default(true)  @map("is_active")
+  organizationId String?  @map("organization_id")
+  createdAt      DateTime @default(now())  @map("created_at")
 
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@map("departments")
 }
 
 model Document {
   id                  String   @id @default(cuid())
-  documentNumber      String
+  documentNumber      String  @map("document_number")
   title               String
-  docType             String   // 27 types (MANUEL/POLITIQUE/PROCEDURE/INSTRUCTION/FORMULAIRE/REGISTRE/ENREGISTREMENT/MASTER_BATCH/SOP/WI/...)
+  docType             String  @map("doc_type")   // 27 types (MANUEL/POLITIQUE/PROCEDURE/INSTRUCTION/FORMULAIRE/REGISTRE/ENREGISTREMENT/MASTER_BATCH/SOP/WI/...)
   version             String   @default("1.0")
   status              String   @default("Draft") // Draft/Under Review/Approved/Effective/Obsolete/Withdrawn
   classification      String   @default("Internal") // Internal/External/Regulatory/Confidential
   code                String?  // ex. MQ-001, PR-4.2.4
-  isoClause           String?
-  documentLevel       Int      @default(4) // 1-4
-  parentDocumentId    String?
-  departmentCode      String?
-  isPrerequisite      Boolean  @default(false)
-  reviewCycleMonths   Int      @default(12)
-  validationPhase     String?  // IQ/OQ/PQ/Full
-  effectiveDate       DateTime?
-  expirationDate      DateTime?
-  lastReviewed        DateTime?
-  nextReview          DateTime?
+  isoClause           String?  @map("iso_clause")
+  documentLevel       Int      @default(4)  @map("document_level") // 1-4
+  parentDocumentId    String?  @map("parent_document_id")
+  departmentCode      String?  @map("department_code")
+  isPrerequisite      Boolean  @default(false)  @map("is_prerequisite")
+  reviewCycleMonths   Int      @default(12)  @map("review_cycle_months")
+  validationPhase     String?  @map("validation_phase")  // IQ/OQ/PQ/Full
+  effectiveDate       DateTime?  @map("effective_date")
+  expirationDate      DateTime?  @map("expiration_date")
+  lastReviewed        DateTime?  @map("last_reviewed")
+  nextReview          DateTime?  @map("next_review")
   owner               String?
-  retentionPeriod     String?
-  docScope            String?
-  docReferences       String?
+  retentionPeriod     String?  @map("retention_period")
+  docScope            String?  @map("doc_scope")
+  docReferences       String?  @map("doc_references")
   content             String?
   summary             String?
-  isTemplate          Boolean  @default(false)
-  templateReferenceId String?
-  templateReferenceVersion String?
-  typeSpecificData    String?  // JSONB
-  customFieldsJson    String?  // JSONB
-  organizationId      String
-  authorId            String?
-  createdById         String?
-  approverId          String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  isTemplate          Boolean  @default(false)  @map("is_template")
+  templateReferenceId String?  @map("template_reference_id")
+  templateReferenceVersion String?  @map("template_reference_version")
+  typeSpecificData    String?  @map("type_specific_data")  // JSONB
+  customFieldsJson    String?  @map("custom_fields_json")  // JSONB
+  organizationId      String  @map("organization_id")
+  authorId            String?  @map("author_id")
+  createdById         String?  @map("created_by_id")
+  approverId          String?  @map("approver_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   author              Profile?     @relation("DocumentAuthor", fields: [authorId], references: [id])
@@ -180,82 +185,88 @@ model Document {
   formTemplates       FormTemplate[]
 
   @@unique([organizationId, documentNumber])
+  @@map("documents")
 }
 
 model ElectronicSignature {
   id                  String   @id @default(cuid())
-  documentId          String?
-  recordId            String?  // polymorphic (capa/ncr/audit/batch id)
-  recordType          String?  // capa/ncr/audit/batch_record/...
-  signedById          String
-  signerName          String
-  signerRole          String
-  signatureType       String   // approval/rejection/review/verification
-  signatureHash       String
-  userAgent           String?
+  documentId          String?  @map("document_id")
+  recordId            String?  @map("record_id")  // polymorphic (capa/ncr/audit/batch id)
+  recordType          String?  @map("record_type")  // capa/ncr/audit/batch_record/...
+  signedById          String  @map("signed_by_id")
+  signerName          String  @map("signer_name")
+  signerRole          String  @map("signer_role")
+  signatureType       String  @map("signature_type")   // approval/rejection/review/verification
+  signatureHash       String  @map("signature_hash")
+  userAgent           String?  @map("user_agent")
   revoked             Boolean  @default(false)
-  revocationReason    String?
-  organizationId      String
-  createdAt           DateTime @default(now())
+  revocationReason    String?  @map("revocation_reason")
+  organizationId      String  @map("organization_id")
+  createdAt           DateTime @default(now())  @map("created_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   document            Document?    @relation(fields: [documentId], references: [id], onDelete: Cascade)
   signedBy            Profile      @relation("Signatures", fields: [signedById], references: [id], onDelete: Cascade)
+  @@map("electronic_signatures")
 }
 
 model DocumentPrerequisite {
   id              String   @id @default(cuid())
-  organizationId  String
-  recordType      String   // capa/ncr/deviation/...
-  requiredDocType String
-  requiredDocRef  String?
-  isMandatory     Boolean  @default(true)
+  organizationId  String  @map("organization_id")
+  recordType      String  @map("record_type")   // capa/ncr/deviation/...
+  requiredDocType String  @map("required_doc_type")
+  requiredDocRef  String?  @map("required_doc_ref")
+  isMandatory     Boolean  @default(true)  @map("is_mandatory")
   description     String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime @default(now())  @map("created_at")
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@map("document_prerequisites")
 }
 
 model DocumentTrigger {
   id                String   @id @default(cuid())
-  sourceDocumentId  String
-  targetDocumentId  String
-  triggerType       String   // prerequisite/references/activates/output/escalation
+  sourceDocumentId  String  @map("source_document_id")
+  targetDocumentId  String  @map("target_document_id")
+  triggerType       String  @map("trigger_type")   // prerequisite/references/activates/output/escalation
   description       String?
-  isMandatory       Boolean  @default(false)
-  organizationId    String
-  createdAt         DateTime @default(now())
+  isMandatory       Boolean  @default(false)  @map("is_mandatory")
+  organizationId    String  @map("organization_id")
+  createdAt         DateTime @default(now())  @map("created_at")
 
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   source            Document     @relation("TriggerSource", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
   target            Document     @relation("TriggerTarget", fields: [targetDocumentId], references: [id], onDelete: Cascade)
+  @@map("document_triggers")
 }
 
 model DocumentRelationship {
   id                  String   @id @default(cuid())
-  parentDocumentId    String
-  childDocumentId     String
-  relationshipType    String   // parent_child/references/supersedes/obsoletes/amends
-  organizationId      String
-  createdAt           DateTime @default(now())
+  parentDocumentId    String  @map("parent_document_id")
+  childDocumentId     String  @map("child_document_id")
+  relationshipType    String  @map("relationship_type")   // parent_child/references/supersedes/obsoletes/amends
+  organizationId      String  @map("organization_id")
+  createdAt           DateTime @default(now())  @map("created_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent              Document     @relation("RelationshipParent", fields: [parentDocumentId], references: [id], onDelete: Cascade)
   child               Document     @relation("RelationshipChild", fields: [childDocumentId], references: [id], onDelete: Cascade)
+  @@map("document_relationships")
 }
 
 model DocumentCodeSequence {
   id              String   @id @default(cuid())
   prefix          String
-  departmentSuffix String?
-  lastSequence    Int      @default(0)
-  organizationId  String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  departmentSuffix String?  @map("department_suffix")
+  lastSequence    Int      @default(0)  @map("last_sequence")
+  organizationId  String  @map("organization_id")
+  createdAt       DateTime @default(now())  @map("created_at")
+  updatedAt       DateTime @updatedAt  @map("updated_at")
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([prefix, departmentSuffix, organizationId])
+  @@map("document_code_sequences")
 }
 
 // ============================================================================
@@ -264,30 +275,31 @@ model DocumentCodeSequence {
 
 model FormTemplate {
   id                  String   @id @default(cuid())
-  documentId          String?
+  documentId          String?  @map("document_id")
   title               String
   version             String   @default("1.0")
   description         String?
   fieldsJson          String   @default("[]") // JSONB FormFieldDefinition[]
-  isActive            Boolean  @default(true)
+  isActive            Boolean  @default(true)  @map("is_active")
   status              String   @default("Draft") // Draft/Under_Review/Approved/Obsolete
-  moduleType          String   // slug → record_type_definitions (capa/ncr/...)
-  workflowJson        String?  // JSONB FormTemplateWorkflow
-  complianceJson      String?  // JSONB FormTemplateCompliance
+  moduleType          String  @map("module_type")   // slug → record_type_definitions (capa/ncr/...)
+  workflowJson        String?  @map("workflow_json")  // JSONB FormTemplateWorkflow
+  complianceJson      String?  @map("compliance_json")  // JSONB FormTemplateCompliance
   signaturesJson      String   @default("[]") // JSONB ElectronicSignature[]
-  currentApprovalStep Int      @default(0)
-  previousVersionId   String?
-  effectiveDate       DateTime?
-  reviewComment       String?
-  organizationId      String
-  createdById         String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  currentApprovalStep Int      @default(0)  @map("current_approval_step")
+  previousVersionId   String?  @map("previous_version_id")
+  effectiveDate       DateTime?  @map("effective_date")
+  reviewComment       String?  @map("review_comment")
+  organizationId      String  @map("organization_id")
+  createdById         String?  @map("created_by_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   document            Document?    @relation(fields: [documentId], references: [id])
   createdBy           Profile?     @relation("FormTemplateCreator", fields: [createdById], references: [id])
   instances           FormInstance[]
+  @@map("form_templates")
 }
 
 // ============================================================================
@@ -296,29 +308,30 @@ model FormTemplate {
 
 model FormInstance {
   id                  String   @id @default(cuid())
-  templateId          String
-  templateVersion     String?
-  referenceNumber     String?
-  valuesJson          String   @default("{}") // JSONB
+  templateId          String  @map("template_id")
+  templateVersion     String?  @map("template_version")
+  referenceNumber     String?  @map("reference_number")
+  valuesJson          String   @default("{}")  @map("values_json") // JSONB
   status              String   @default("Draft") // Draft/Submitted/Approved/Rejected
-  isLocked            Boolean  @default(false)
-  submittedById       String?
-  submittedAt         DateTime?
-  signatureHash       String?
+  isLocked            Boolean  @default(false)  @map("is_locked")
+  submittedById       String?  @map("submitted_by_id")
+  submittedAt         DateTime?  @map("submitted_at")
+  signatureHash       String?  @map("signature_hash")
   signaturesJson      String   @default("[]") // JSONB
-  currentApprovalStep Int      @default(0)
+  currentApprovalStep Int      @default(0)  @map("current_approval_step")
   approvalHistoryJson String   @default("[]") // JSONB
-  parentDocumentId    String?
-  linkedRecordId      String?
-  linkedRecordType    String?
-  recordTypeSlug      String?
-  organizationId      String
-  createdById         String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  parentDocumentId    String?  @map("parent_document_id")
+  linkedRecordId      String?  @map("linked_record_id")
+  linkedRecordType    String?  @map("linked_record_type")
+  recordTypeSlug      String?  @map("record_type_slug")
+  organizationId      String  @map("organization_id")
+  createdById         String?  @map("created_by_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   template            FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  @@map("form_instances")
 }
 
 // ============================================================================
@@ -327,308 +340,317 @@ model FormInstance {
 
 model CAPA {
   id                          String   @id @default(cuid())
-  capaNumber                  String
+  capaNumber                  String  @map("capa_number")
   title                       String
-  capaType                    String   @default("Corrective") // Corrective/Preventive
+  capaType                    String   @default("Corrective")  @map("capa_type") // Corrective/Preventive
   status                      String   @default("Open") // Open/Investigation/Implementation/Effectiveness Check/Closed
   priority                    String   @default("Medium") // Critical/High/Medium/Low
   source                      String   @default("Non-Conformance") // Non-Conformance/Audit Finding/Customer Complaint/Management Review/Process Monitoring/Supplier Issue
-  sourceReferenceId           String?
-  sourceRecordType            String?
+  sourceReferenceId           String?  @map("source_reference_id")
+  sourceRecordType            String?  @map("source_record_type")
   description                 String?
-  problemStatement            String?
-  investigationDetails        String?
-  rootCauseAnalysis           String?
-  rootCauseCategory           String?  // Man/Machine/Method/Material/Measurement/Environment/Management
+  problemStatement            String?  @map("problem_statement")
+  investigationDetails        String?  @map("investigation_details")
+  rootCauseAnalysis           String?  @map("root_cause_analysis")
+  rootCauseCategory           String?  @map("root_cause_category")  // Man/Machine/Method/Material/Measurement/Environment/Management
   fiveWhysJson                String   @default("[]") // JSONB string[]
-  correctiveAction            String?
-  effectivenessVerificationMethod String?
-  effectivenessCriteria       String?
-  effectivenessResult         String?  // Effective/Not Effective/Pending Review
-  linkedDocumentId            String?
-  linkedNcrId                 String?
-  linkedAuditId               String?
-  linkedCapaId                String?  // parent CAPA (chain)
-  templateId                  String?
-  templateVersion             String?
-  assignedToId                String?
-  ownerId                     String?
-  dueDate                     DateTime?
-  createdDate                 DateTime @default(now())
-  closedDate                  DateTime?
-  organizationId              String
-  createdById                 String?
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  correctiveAction            String?  @map("corrective_action")
+  effectivenessVerificationMethod String?  @map("effectiveness_verification_method")
+  effectivenessCriteria       String?  @map("effectiveness_criteria")
+  effectivenessResult         String?  @map("effectiveness_result")  // Effective/Not Effective/Pending Review
+  linkedDocumentId            String?  @map("linked_document_id")
+  linkedNcrId                 String?  @map("linked_ncr_id")
+  linkedAuditId               String?  @map("linked_audit_id")
+  linkedCapaId                String?  @map("linked_capa_id")  // parent CAPA (chain)
+  templateId                  String?  @map("template_id")
+  templateVersion             String?  @map("template_version")
+  assignedToId                String?  @map("assigned_to_id")
+  ownerId                     String?  @map("owner_id")
+  dueDate                     DateTime?  @map("due_date")
+  createdDate                 DateTime @default(now())  @map("created_date")
+  closedDate                  DateTime?  @map("closed_date")
+  organizationId              String  @map("organization_id")
+  createdById                 String?  @map("created_by_id")
+  createdAt                   DateTime @default(now())  @map("created_at")
+  updatedAt                   DateTime @updatedAt  @map("updated_at")
 
   organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner                       Profile?     @relation("CapaOwner", fields: [ownerId], references: [id])
   assignee                    Profile?     @relation("CapaAssignee", fields: [assignedToId], references: [id])
+  @@map("capas")
 }
 
 model NonConformance {
   id                  String   @id @default(cuid())
-  ncrNumber           String
+  ncrNumber           String  @map("ncr_number")
   title               String
-  ncrType             String   @default("Process") // Product/Process/System/Supplier/OOS/OOT
+  ncrType             String   @default("Process")  @map("ncr_type") // Product/Process/System/Supplier/OOS/OOT
   status              String   @default("Open") // Open/Under Investigation/Pending Disposition/Closed
   severity            String   @default("Minor") // Critical/Major/Minor
   source              String?
   description         String?
-  lotNumber           String?
-  quantityAffected    String?
+  lotNumber           String?  @map("lot_number")
+  quantityAffected    String?  @map("quantity_affected")
   disposition         String   @default("Pending") // Use As Is/Rework/Scrap/Return to Supplier/Concession/Pending
-  isOosOot            Boolean  @default(false)
-  analyticalMethod    String?
-  measuredValue       Float?
-  measuredUnit        String?
-  specLimit           String?
-  phase1Conclusion    String?  // Assignable Cause Found/No Assignable Cause Found/Error Found/No Error Found/Pending
-  phase2Required      Boolean  @default(false)
-  phase2Conclusion    String?  // Confirmed OOS/Invalidated/Pending
-  rejectLot           Boolean  @default(false)
-  linkedCapaId        String?
-  linkedProcedureRef  String?
-  supplierId          String?
-  impactAssessment    String?
-  containmentActions  String?
-  affectedProduct     String?
-  closedSignatureHash String?
-  closedSignedAt      DateTime?
-  closedById          String?
-  closedReason        String?
-  assignedToId        String?
-  ownerId             String?
-  dueDate             DateTime?
-  createdDate         DateTime @default(now())
-  organizationId      String
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  isOosOot            Boolean  @default(false)  @map("is_oos_oot")
+  analyticalMethod    String?  @map("analytical_method")
+  measuredValue       Float?  @map("measured_value")
+  measuredUnit        String?  @map("measured_unit")
+  specLimit           String?  @map("spec_limit")
+  phase1Conclusion    String?  @map("phase1_conclusion")  // Assignable Cause Found/No Assignable Cause Found/Error Found/No Error Found/Pending
+  phase2Required      Boolean  @default(false)  @map("phase2_required")
+  phase2Conclusion    String?  @map("phase2_conclusion")  // Confirmed OOS/Invalidated/Pending
+  rejectLot           Boolean  @default(false)  @map("reject_lot")
+  linkedCapaId        String?  @map("linked_capa_id")
+  linkedProcedureRef  String?  @map("linked_procedure_ref")
+  supplierId          String?  @map("supplier_id")
+  impactAssessment    String?  @map("impact_assessment")
+  containmentActions  String?  @map("containment_actions")
+  affectedProduct     String?  @map("affected_product")
+  closedSignatureHash String?  @map("closed_signature_hash")
+  closedSignedAt      DateTime?  @map("closed_signed_at")
+  closedById          String?  @map("closed_by_id")
+  closedReason        String?  @map("closed_reason")
+  assignedToId        String?  @map("assigned_to_id")
+  ownerId             String?  @map("owner_id")
+  dueDate             DateTime?  @map("due_date")
+  createdDate         DateTime @default(now())  @map("created_date")
+  organizationId      String  @map("organization_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner               Profile?     @relation("NcrOwner", fields: [ownerId], references: [id])
   assignee            Profile?     @relation("NcrAssignee", fields: [assignedToId], references: [id])
+  @@map("non_conformances")
 }
 
 model Deviation {
   id                      String   @id @default(cuid())
-  devNumber               String
+  devNumber               String  @map("dev_number")
   title                   String
-  deviationType           String   @default("Unplanned") // Planned/Unplanned
+  deviationType           String   @default("Unplanned")  @map("deviation_type") // Planned/Unplanned
   status                  String   @default("Open") // Open/Under Investigation/Pending QA Review/Approved/Closed
   severity                String   @default("Minor") // Critical/Major/Minor
   category                String   @default("Process") // Process/Equipment/Material/Environment/Personnel/Documentation
   description             String?
-  deviationDetails        String?
+  deviationDetails        String?  @map("deviation_details")
   justification           String?
-  riskAssessment          String?
-  correctiveAction        String?
-  preventiveAction        String?
-  sopReference            String?
-  expectedResult          String?
-  actualResult            String?
-  productStage            String?  // Raw Material/In-Process/Finished Product/Stability/Other
+  riskAssessment          String?  @map("risk_assessment")
+  correctiveAction        String?  @map("corrective_action")
+  preventiveAction        String?  @map("preventive_action")
+  sopReference            String?  @map("sop_reference")
+  expectedResult          String?  @map("expected_result")
+  actualResult            String?  @map("actual_result")
+  productStage            String?  @map("product_stage")  // Raw Material/In-Process/Finished Product/Stability/Other
   quarantine              Boolean  @default(false)
-  impactOnValidatedState  String?
-  impactOnRegulatoryFiling String?
-  containmentAction       String?
-  detectedDate            DateTime?
-  isPlannedDeviation      Boolean  @default(false)
-  lotNumber               String?
-  productCode             String?
-  quantityAffected        String?
-  linkedCapaId            String?
-  linkedDocumentId        String?
-  assignedToId            String?
-  ownerId                 String?
-  dueDate                 DateTime?
-  closedDate              DateTime?
-  organizationId          String
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  impactOnValidatedState  String?  @map("impact_on_validated_state")
+  impactOnRegulatoryFiling String?  @map("impact_on_regulatory_filing")
+  containmentAction       String?  @map("containment_action")
+  detectedDate            DateTime?  @map("detected_date")
+  isPlannedDeviation      Boolean  @default(false)  @map("is_planned_deviation")
+  lotNumber               String?  @map("lot_number")
+  productCode             String?  @map("product_code")
+  quantityAffected        String?  @map("quantity_affected")
+  linkedCapaId            String?  @map("linked_capa_id")
+  linkedDocumentId        String?  @map("linked_document_id")
+  assignedToId            String?  @map("assigned_to_id")
+  ownerId                 String?  @map("owner_id")
+  dueDate                 DateTime?  @map("due_date")
+  closedDate              DateTime?  @map("closed_date")
+  organizationId          String  @map("organization_id")
+  createdAt               DateTime @default(now())  @map("created_at")
+  updatedAt               DateTime @updatedAt  @map("updated_at")
 
   organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner                   Profile?     @relation("DeviationOwner", fields: [ownerId], references: [id])
   assignee                Profile?     @relation("DeviationAssignee", fields: [assignedToId], references: [id])
+  @@map("deviations")
 }
 
 model ChangeControl {
   id                          String   @id @default(cuid())
-  ccNumber                    String
+  ccNumber                    String  @map("cc_number")
   title                       String
-  ccType                      String   @default("Planned") // Planned/Unplanned/Emergency
+  ccType                      String   @default("Planned")  @map("cc_type") // Planned/Unplanned/Emergency
   status                      String   @default("Requested") // Requested/Under Review/Approved/In Implementation/Completed/Rejected
   priority                    String   @default("Medium") // Critical/High/Medium/Low
   category                    String   @default("Process") // 12 valeurs
   description                 String?
   justification               String?
-  proposedChange              String?
-  detailedChangeDescription   String?
-  businessComplianceJustification String?
-  riskAssessment              String?
-  impactAnalysis              String?
-  affectedAreas               String?
-  impactOnValidatedSystems    Boolean  @default(false)
-  implementationPlan          String?
-  implementationDate          DateTime?
-  estimatedCostImpact         String?
-  completionDate              DateTime?
-  regulatoryTrigger           String?
-  emergencyFlag               Boolean  @default(false)
-  linkedDocumentId            String?
-  linkedCapaId                String?
-  additionalReferences        String?
-  assignedToId                String?
-  requestedById               String?
-  approvedById                String?
-  approverId                  String?
-  ownerId                     String?
-  dueDate                     DateTime?
-  organizationId              String
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  proposedChange              String?  @map("proposed_change")
+  detailedChangeDescription   String?  @map("detailed_change_description")
+  businessComplianceJustification String?  @map("business_compliance_justification")
+  riskAssessment              String?  @map("risk_assessment")
+  impactAnalysis              String?  @map("impact_analysis")
+  affectedAreas               String?  @map("affected_areas")
+  impactOnValidatedSystems    Boolean  @default(false)  @map("impact_on_validated_systems")
+  implementationPlan          String?  @map("implementation_plan")
+  implementationDate          DateTime?  @map("implementation_date")
+  estimatedCostImpact         String?  @map("estimated_cost_impact")
+  completionDate              DateTime?  @map("completion_date")
+  regulatoryTrigger           String?  @map("regulatory_trigger")
+  emergencyFlag               Boolean  @default(false)  @map("emergency_flag")
+  linkedDocumentId            String?  @map("linked_document_id")
+  linkedCapaId                String?  @map("linked_capa_id")
+  additionalReferences        String?  @map("additional_references")
+  assignedToId                String?  @map("assigned_to_id")
+  requestedById               String?  @map("requested_by_id")
+  approvedById                String?  @map("approved_by_id")
+  approverId                  String?  @map("approver_id")
+  ownerId                     String?  @map("owner_id")
+  dueDate                     DateTime?  @map("due_date")
+  organizationId              String  @map("organization_id")
+  createdAt                   DateTime @default(now())  @map("created_at")
+  updatedAt                   DateTime @updatedAt  @map("updated_at")
 
   organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner                       Profile?     @relation("CcOwner", fields: [ownerId], references: [id])
   requester                   Profile?     @relation("CcRequester", fields: [requestedById], references: [id])
   approver                    Profile?     @relation("CcApprover", fields: [approvedById], references: [id])
+  @@map("change_controls")
 }
 
 model Audit {
   id                          String   @id @default(cuid())
-  auditNumber                 String
+  auditNumber                 String  @map("audit_number")
   title                       String
-  auditType                   String   @default("Internal") // Internal/External/Supplier
+  auditType                   String   @default("Internal")  @map("audit_type") // Internal/External/Supplier
   status                      String   @default("Planned") // Planned/In Progress/Completed
-  auditScope                  String?
-  scheduledDate               DateTime?
-  completedDate               DateTime?
-  leadAuditorId               String?
+  auditScope                  String?  @map("audit_scope")
+  scheduledDate               DateTime?  @map("scheduled_date")
+  completedDate               DateTime?  @map("completed_date")
+  leadAuditorId               String?  @map("lead_auditor_id")
   auditeesJson                String   @default("[]") // JSONB string[]
   findingsJson                String   @default("[]") // JSONB AuditFinding[]
-  auditCriteria               String?
-  complianceRating            String?
-  completedSignatureHash      String?
-  completedSignedAt           DateTime?
-  completedSignedById         String?
-  organizationId              String
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  auditCriteria               String?  @map("audit_criteria")
+  complianceRating            String?  @map("compliance_rating")
+  completedSignatureHash      String?  @map("completed_signature_hash")
+  completedSignedAt           DateTime?  @map("completed_signed_at")
+  completedSignedById         String?  @map("completed_signed_by_id")
+  organizationId              String  @map("organization_id")
+  createdAt                   DateTime @default(now())  @map("created_at")
+  updatedAt                   DateTime @updatedAt  @map("updated_at")
 
   organization                Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leadAuditor                 Profile?     @relation("AuditLeadAuditor", fields: [leadAuditorId], references: [id])
   signer                      Profile?     @relation("AuditSigner", fields: [completedSignedById], references: [id])
+  @@map("audits")
 }
 
 model Risk {
   id                  String   @id @default(cuid())
-  riskNumber          String
+  riskNumber          String  @map("risk_number")
   title               String
   category            String   @default("Process") // Product/Process/System/Supplier
   status              String   @default("Open") // Open/Mitigated/Accepted/Closed
-  hazardDescription   String?
-  riskOwner           String?
-  regulatoryReference String?
-  controlType         String?  // inherent_safe_design/protective_measures/information_for_safety
-  verificationMethod  String?
-  riskAcceptability   String   @default("ALARP") // acceptable/ALARP/unacceptable
-  priorityNotes       String?
+  hazardDescription   String?  @map("hazard_description")
+  riskOwner           String?  @map("risk_owner")
+  regulatoryReference String?  @map("regulatory_reference")
+  controlType         String?  @map("control_type")  // inherent_safe_design/protective_measures/information_for_safety
+  verificationMethod  String?  @map("verification_method")
+  riskAcceptability   String   @default("ALARP")  @map("risk_acceptability") // acceptable/ALARP/unacceptable
+  priorityNotes       String?  @map("priority_notes")
   probability         Int      @default(3) // 1-5
   impact              Int      @default(3) // 1-5
   detectability       Int      @default(3) // 1-5
   rpn                 Int      @default(27) // P*I*D
-  riskLevel           String   @default("Medium") // Low/Medium/High/Critical
+  riskLevel           String   @default("Medium")  @map("risk_level") // Low/Medium/High/Critical
   mitigation          String?
-  residualRisk        String?
-  residualProbability Int?
-  residualImpact      Int?
-  residualDetectability Int?
-  residualRpn         Int?
-  linkedDocumentId    String?
-  linkedCapaId        String?
-  ownerId             String?
-  organizationId      String
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  residualRisk        String?  @map("residual_risk")
+  residualProbability Int?  @map("residual_probability")
+  residualImpact      Int?  @map("residual_impact")
+  residualDetectability Int?  @map("residual_detectability")
+  residualRpn         Int?  @map("residual_rpn")
+  linkedDocumentId    String?  @map("linked_document_id")
+  linkedCapaId        String?  @map("linked_capa_id")
+  ownerId             String?  @map("owner_id")
+  organizationId      String  @map("organization_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner               Profile?     @relation("RiskOwner", fields: [ownerId], references: [id])
+  @@map("risks")
 }
 
 model Training {
   id                  String   @id @default(cuid())
   title               String
   description         String?
-  trainingType        String   @default("SOP") // Onboarding/SOP/Regulatory/Skill/Certification
+  trainingType        String   @default("SOP")  @map("training_type") // Onboarding/SOP/Regulatory/Skill/Certification
   status              String   @default("Planned") // Planned/In Progress/Completed/Overdue
-  assignedToId        String
-  dueDate             DateTime?
-  completedDate       DateTime?
-  documentId          String?
-  metadataJson        String?  // JSONB (deliveryMethod, trainer, passingScore, etc.)
-  organizationId      String
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  assignedToId        String  @map("assigned_to_id")
+  dueDate             DateTime?  @map("due_date")
+  completedDate       DateTime?  @map("completed_date")
+  documentId          String?  @map("document_id")
+  metadataJson        String?  @map("metadata_json")  // JSONB (deliveryMethod, trainer, passingScore, etc.)
+  organizationId      String  @map("organization_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignee            Profile      @relation("TrainingAssignee", fields: [assignedToId], references: [id], onDelete: Cascade)
+  @@map("training")
 }
 
 model BatchRecord {
   id                  String   @id @default(cuid())
-  lotNumber           String
-  productName         String
-  productCode         String?
-  batchSize           String?
-  batchSizeUnit       String   @default("units") // vials/units/tablets/kg/liters
-  masterFormulaId     String?
-  sopReference        String?
-  manufacturingDate   DateTime?
-  expiryDate          DateTime?
+  lotNumber           String  @map("lot_number")
+  productName         String  @map("product_name")
+  productCode         String?  @map("product_code")
+  batchSize           String?  @map("batch_size")
+  batchSizeUnit       String   @default("units")  @map("batch_size_unit") // vials/units/tablets/kg/liters
+  masterFormulaId     String?  @map("master_formula_id")
+  sopReference        String?  @map("sop_reference")
+  manufacturingDate   DateTime?  @map("manufacturing_date")
+  expiryDate          DateTime?  @map("expiry_date")
   status              String   @default("In Progress") // In Progress/Pending QA Review/Released/Rejected/Quarantine
-  isLocked            Boolean  @default(false)
-  qaReleaseDate       DateTime?
-  qaReleasedById      String?
+  isLocked            Boolean  @default(false)  @map("is_locked")
+  qaReleaseDate       DateTime?  @map("qa_release_date")
+  qaReleasedById      String?  @map("qa_released_by_id")
   stepsJson           String   @default("[]") // JSONB BatchStep[]
   rawMaterialsJson    String   @default("[]") // JSONB RawMaterial[]
-  organizationId      String
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  organizationId      String  @map("organization_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   qaReleaser          Profile?     @relation("BatchQaReleaser", fields: [qaReleasedById], references: [id])
+  @@map("batch_records")
 }
 
 model Supplier {
   id                      String   @id @default(cuid())
-  supplierCode            String
+  supplierCode            String  @map("supplier_code")
   name                    String
   category                String   @default("Raw Material") // Raw Material/Packaging/Equipment/Service/Contract Manufacturer/Laboratory/Other
   status                  String   @default("Under Evaluation") // Qualified/Conditional/Disqualified/Under Evaluation
-  qualificationDate       DateTime?
-  nextReviewDate          DateTime?
+  qualificationDate       DateTime?  @map("qualification_date")
+  nextReviewDate          DateTime?  @map("next_review_date")
   certificationsJson      String   @default("[]") // JSONB string[]
-  performanceScore        Float?   // 0-100
-  qualificationDocId      String?
-  qualificationMethod     String?  // On-Site Audit/Questionnaire/Certificate Review/Third-Party Assessment/Historical Performance
-  qualificationDocRef     String?
+  performanceScore        Float?  @map("performance_score")   // 0-100
+  qualificationDocId      String?  @map("qualification_doc_id")
+  qualificationMethod     String?  @map("qualification_method")  // On-Site Audit/Questionnaire/Certificate Review/Third-Party Assessment/Historical Performance
+  qualificationDocRef     String?  @map("qualification_doc_ref")
   website                 String?
-  primaryContactName      String?
-  primaryContactEmail     String?
-  primaryContactPhone     String?
+  primaryContactName      String?  @map("primary_contact_name")
+  primaryContactEmail     String?  @map("primary_contact_email")
+  primaryContactPhone     String?  @map("primary_contact_phone")
   street                  String?
   city                    String?
-  stateProvince           String?
-  postalCode              String?
+  stateProvince           String?  @map("state_province")
+  postalCode              String?  @map("postal_code")
   country                 String?
-  emergencyContactName    String?
-  emergencyContactPhone   String?
+  emergencyContactName    String?  @map("emergency_contact_name")
+  emergencyContactPhone   String?  @map("emergency_contact_phone")
   notes                   String?
-  organizationId          String
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  organizationId          String  @map("organization_id")
+  createdAt               DateTime @default(now())  @map("created_at")
+  updatedAt               DateTime @updatedAt  @map("updated_at")
 
   organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@map("suppliers")
 }
 
 // ============================================================================
@@ -637,23 +659,24 @@ model Supplier {
 
 model AuditTrail {
   id              String   @id @default(cuid())
-  sequenceNumber  Int?
-  previousHash    String?
+  sequenceNumber  Int?  @map("sequence_number")
+  previousHash    String?  @map("previous_hash")
   hash            String?
-  auditAction     String   // CREATE/UPDATE/DELETE/APPROVE/REJECT/SIGN/LOGIN/EXPORT
-  tableName       String
-  recordId        String
-  userId          String?
-  userEmail       String?
-  oldValuesJson   String?  // JSONB
-  newValuesJson   String?  // JSONB
-  ipAddress       String?
-  userAgent       String?
-  organizationId  String
-  createdAt       DateTime @default(now())
+  auditAction     String  @map("audit_action")   // CREATE/UPDATE/DELETE/APPROVE/REJECT/SIGN/LOGIN/EXPORT
+  tableName       String  @map("table_name")
+  recordId        String  @map("record_id")
+  userId          String?  @map("user_id")
+  userEmail       String?  @map("user_email")
+  oldValuesJson   String?  @map("old_values_json")  // JSONB
+  newValuesJson   String?  @map("new_values_json")  // JSONB
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  organizationId  String  @map("organization_id")
+  createdAt       DateTime @default(now())  @map("created_at")
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user            Profile?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@map("audit_trails")
 }
 
 // ============================================================================
@@ -664,46 +687,48 @@ model RecordTypeDefinition {
   id                  String   @id @default(cuid())
   slug                String
   name                String
-  nameEn              String?
+  nameEn              String?  @map("name_en")
   icon                String   @default("FileText")
   description         String?
   statusFlowJson      String   @default("[]") // JSONB StatusFlowStep[]
   defaultFieldsJson   String   @default("[]") // JSONB FormFieldDefinition[]
   complianceRefsJson  String   @default("[]") // JSONB ComplianceRef[]
-  codePrefix          String?
-  isSystem            Boolean  @default(false)
-  isActive            Boolean  @default(true)
-  requiresEsig        Boolean  @default(false)
-  minApproverCount    Int      @default(1)
-  effectiveDate       DateTime?
-  previousVersionId   String?
+  codePrefix          String?  @map("code_prefix")
+  isSystem            Boolean  @default(false)  @map("is_system")
+  isActive            Boolean  @default(true)  @map("is_active")
+  requiresEsig        Boolean  @default(false)  @map("requires_esig")
+  minApproverCount    Int      @default(1)  @map("min_approver_count")
+  effectiveDate       DateTime?  @map("effective_date")
+  previousVersionId   String?  @map("previous_version_id")
   version             Int      @default(1)
-  changeReason        String?
-  organizationId      String
-  createdById         String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  changeReason        String?  @map("change_reason")
+  organizationId      String  @map("organization_id")
+  createdById         String?  @map("created_by_id")
+  createdAt           DateTime @default(now())  @map("created_at")
+  updatedAt           DateTime @updatedAt  @map("updated_at")
 
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, slug])
+  @@map("record_type_definitions")
 }
 
 model RecordLink {
   id                String   @id @default(cuid())
-  sourceRecordId    String
-  sourceRecordType  String   // slug
-  targetRecordId    String
-  targetRecordType  String   // slug
-  linkType          String   @default("related") // related/caused_by/corrected_by/linked_to/derived_from/supersedes/references/depends_on
+  sourceRecordId    String  @map("source_record_id")
+  sourceRecordType  String  @map("source_record_type")   // slug
+  targetRecordId    String  @map("target_record_id")
+  targetRecordType  String  @map("target_record_type")   // slug
+  linkType          String   @default("related")  @map("link_type") // related/caused_by/corrected_by/linked_to/derived_from/supersedes/references/depends_on
   description       String?
-  organizationId    String
-  createdById       String?
-  createdAt         DateTime @default(now())
+  organizationId    String  @map("organization_id")
+  createdById       String?  @map("created_by_id")
+  createdAt         DateTime @default(now())  @map("created_at")
 
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([sourceRecordId, sourceRecordType, targetRecordId, targetRecordType, linkType])
+  @@map("record_links")
 }
 
 // ============================================================================
@@ -717,29 +742,31 @@ model CustomFieldDefinition {
   type            String   @default("text") // text/number/date/select/checkbox/textarea/url
   required        Boolean  @default(false)
   optionsJson     String   @default("[]") // JSONB string[]
-  applicableTo    String   @default("*") // doc types ou ['*']
-  organizationId  String
-  sortOrder       Int      @default(0)
-  createdAt       DateTime @default(now())
+  applicableTo    String   @default("*")  @map("applicable_to") // doc types ou ['*']
+  organizationId  String  @map("organization_id")
+  sortOrder       Int      @default(0)  @map("sort_order")
+  createdAt       DateTime @default(now())  @map("created_at")
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@map("custom_field_definitions")
 }
 
 model ScheduledReport {
   id              String   @id @default(cuid())
   name            String
-  reportType      String   // management_review/capa_summary/audit_summary/compliance_overview/training_status/risk_profile
+  reportType      String  @map("report_type")   // management_review/capa_summary/audit_summary/compliance_overview/training_status/risk_profile
   format          String   @default("pdf") // csv/html/pdf
   frequency       String   @default("monthly") // daily/weekly/monthly/quarterly
   recipientsJson  String   @default("[]") // JSONB string[]
-  filtersJson     String   @default("{}") // JSONB Record<string,string>
+  filtersJson     String   @default("{}")  @map("filters_json") // JSONB Record<string,string>
   status          String   @default("active") // active/paused/completed/error
-  lastRunAt       DateTime?
-  nextRunAt       DateTime?
-  lastResult      String?
-  organizationId  String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  lastRunAt       DateTime?  @map("last_run_at")
+  nextRunAt       DateTime?  @map("next_run_at")
+  lastResult      String?  @map("last_result")
+  organizationId  String  @map("organization_id")
+  createdAt       DateTime @default(now())  @map("created_at")
+  updatedAt       DateTime @updatedAt  @map("updated_at")
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  @@map("scheduled_reports")
 }
