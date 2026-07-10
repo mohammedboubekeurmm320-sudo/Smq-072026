@@ -11,8 +11,6 @@
 --   2) Variable locale 'app.user_id' (posee par les API routes)
 -- ============================================================================
 
-BEGIN;
-
 -- ============================================================================
 -- Helper functions
 -- ============================================================================
@@ -83,15 +81,24 @@ END $$;
 
 -- ============================================================================
 -- Standard RLS macro: 4 politiques CRUD par table
+-- Compatible PG 14+ (DROP + CREATE au lieu de CREATE OR REPLACE)
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION create_std_rls(p_table TEXT)
 RETURNS VOID AS $$
 BEGIN
-  EXECUTE format('CREATE OR REPLACE POLICY %I_sel ON %I FOR SELECT TO authenticated USING (is_org_member(organization_id))', p_table, p_table);
-  EXECUTE format('CREATE OR REPLACE POLICY %I_ins ON %I FOR INSERT TO authenticated WITH CHECK (is_org_member(organization_id))', p_table, p_table);
-  EXECUTE format('CREATE OR REPLACE POLICY %I_upd ON %I FOR UPDATE TO authenticated USING (is_org_member(organization_id)) WITH CHECK (is_org_member(organization_id))', p_table, p_table);
-  EXECUTE format('CREATE OR REPLACE POLICY %I_del ON %I FOR DELETE TO authenticated USING (is_org_member(organization_id))', p_table, p_table);
+  -- SELECT
+  EXECUTE format('DROP POLICY IF EXISTS %I_sel ON %I', p_table, p_table);
+  EXECUTE format('CREATE POLICY %I_sel ON %I FOR SELECT TO authenticated USING (is_org_member(organization_id))', p_table, p_table);
+  -- INSERT
+  EXECUTE format('DROP POLICY IF EXISTS %I_ins ON %I', p_table, p_table);
+  EXECUTE format('CREATE POLICY %I_ins ON %I FOR INSERT TO authenticated WITH CHECK (is_org_member(organization_id))', p_table, p_table);
+  -- UPDATE
+  EXECUTE format('DROP POLICY IF EXISTS %I_upd ON %I', p_table, p_table);
+  EXECUTE format('CREATE POLICY %I_upd ON %I FOR UPDATE TO authenticated USING (is_org_member(organization_id)) WITH CHECK (is_org_member(organization_id))', p_table, p_table);
+  -- DELETE
+  EXECUTE format('DROP POLICY IF EXISTS %I_del ON %I', p_table, p_table);
+  EXECUTE format('CREATE POLICY %I_del ON %I FOR DELETE TO authenticated USING (is_org_member(organization_id))', p_table, p_table);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -115,61 +122,81 @@ END $$;
 -- Tables avec politiques speciales
 -- ============================================================================
 
--- audit_trails: INSERT seulement (immuable)
-CREATE OR REPLACE POLICY audit_trails_sel ON audit_trails
+-- audit_trails: INSERT + SELECT seulement (immuable)
+DROP POLICY IF EXISTS audit_trails_sel ON audit_trails;
+CREATE POLICY audit_trails_sel ON audit_trails
   FOR SELECT TO authenticated USING (is_org_member(organization_id));
-CREATE OR REPLACE POLICY audit_trails_ins ON audit_trails
+DROP POLICY IF EXISTS audit_trails_ins ON audit_trails;
+CREATE POLICY audit_trails_ins ON audit_trails
   FOR INSERT TO authenticated WITH CHECK (is_org_member(organization_id));
 
 -- record_type_definitions: lecture membres, ecriture admin
-CREATE OR REPLACE POLICY rtd_sel ON record_type_definitions
+DROP POLICY IF EXISTS rtd_sel ON record_type_definitions;
+CREATE POLICY rtd_sel ON record_type_definitions
   FOR SELECT TO authenticated USING (is_org_member(organization_id));
-CREATE OR REPLACE POLICY rtd_ins ON record_type_definitions
+DROP POLICY IF EXISTS rtd_ins ON record_type_definitions;
+CREATE POLICY rtd_ins ON record_type_definitions
   FOR INSERT TO authenticated WITH CHECK (is_org_admin(organization_id));
-CREATE OR REPLACE POLICY rtd_upd ON record_type_definitions
+DROP POLICY IF EXISTS rtd_upd ON record_type_definitions;
+CREATE POLICY rtd_upd ON record_type_definitions
   FOR UPDATE TO authenticated USING (is_org_admin(organization_id)) WITH CHECK (is_org_admin(organization_id));
-CREATE OR REPLACE POLICY rtd_del ON record_type_definitions
+DROP POLICY IF EXISTS rtd_del ON record_type_definitions;
+CREATE POLICY rtd_del ON record_type_definitions
   FOR DELETE TO authenticated USING (is_org_admin(organization_id));
 
 -- organizations: membre=lecture, libre=creation, admin=update, owner=delete
-CREATE OR REPLACE POLICY orgs_sel ON organizations
+DROP POLICY IF EXISTS orgs_sel ON organizations;
+CREATE POLICY orgs_sel ON organizations
   FOR SELECT TO authenticated USING (is_org_member(id));
-CREATE OR REPLACE POLICY orgs_ins ON organizations
+DROP POLICY IF EXISTS orgs_ins ON organizations;
+CREATE POLICY orgs_ins ON organizations
   FOR INSERT TO authenticated WITH CHECK (true);
-CREATE OR REPLACE POLICY orgs_upd ON organizations
+DROP POLICY IF EXISTS orgs_upd ON organizations;
+CREATE POLICY orgs_upd ON organizations
   FOR UPDATE TO authenticated USING (is_org_admin(id)) WITH CHECK (is_org_admin(id));
-CREATE OR REPLACE POLICY orgs_del ON organizations
+DROP POLICY IF EXISTS orgs_del ON organizations;
+CREATE POLICY orgs_del ON organizations
   FOR DELETE TO authenticated USING (
     EXISTS (SELECT 1 FROM organization_members WHERE organization_id = id AND profile_id = current_profile_id() AND role = 'owner' AND status = 'active')
   );
 
 -- profiles: son profil ou profil de son org
-CREATE OR REPLACE POLICY profiles_sel ON profiles
+DROP POLICY IF EXISTS profiles_sel ON profiles;
+CREATE POLICY profiles_sel ON profiles
   FOR SELECT TO authenticated USING (id = current_profile_id() OR is_org_member(organization_id));
-CREATE OR REPLACE POLICY profiles_ins ON profiles
+DROP POLICY IF EXISTS profiles_ins ON profiles;
+CREATE POLICY profiles_ins ON profiles
   FOR INSERT TO authenticated WITH CHECK (id = current_profile_id());
-CREATE OR REPLACE POLICY profiles_upd ON profiles
+DROP POLICY IF EXISTS profiles_upd ON profiles;
+CREATE POLICY profiles_upd ON profiles
   FOR UPDATE TO authenticated USING (id = current_profile_id() OR is_org_admin(organization_id))
   WITH CHECK (id = current_profile_id() OR is_org_admin(organization_id));
 
 -- organization_members
-CREATE OR REPLACE POLICY om_sel ON organization_members
+DROP POLICY IF EXISTS om_sel ON organization_members;
+CREATE POLICY om_sel ON organization_members
   FOR SELECT TO authenticated USING (profile_id = current_profile_id() OR is_org_member(organization_id));
-CREATE OR REPLACE POLICY om_ins ON organization_members
+DROP POLICY IF EXISTS om_ins ON organization_members;
+CREATE POLICY om_ins ON organization_members
   FOR INSERT TO authenticated WITH CHECK (profile_id = current_profile_id() OR is_org_admin(organization_id));
-CREATE OR REPLACE POLICY om_upd ON organization_members
+DROP POLICY IF EXISTS om_upd ON organization_members;
+CREATE POLICY om_upd ON organization_members
   FOR UPDATE TO authenticated USING (is_org_admin(organization_id)) WITH CHECK (is_org_admin(organization_id));
-CREATE OR REPLACE POLICY om_del ON organization_members
+DROP POLICY IF EXISTS om_del ON organization_members;
+CREATE POLICY om_del ON organization_members
   FOR DELETE TO authenticated USING (is_org_admin(organization_id));
 
 -- sessions: proprietaire ou admin de l'org
-CREATE OR REPLACE POLICY sessions_sel ON sessions
+DROP POLICY IF EXISTS sessions_sel ON sessions;
+CREATE POLICY sessions_sel ON sessions
   FOR SELECT TO authenticated USING (
     profile_id = current_profile_id() OR is_org_admin((SELECT organization_id FROM profiles WHERE id = profile_id LIMIT 1))
   );
-CREATE OR REPLACE POLICY sessions_ins ON sessions
+DROP POLICY IF EXISTS sessions_ins ON sessions;
+CREATE POLICY sessions_ins ON sessions
   FOR INSERT TO authenticated WITH CHECK (true);
-CREATE OR REPLACE POLICY sessions_del ON sessions
+DROP POLICY IF EXISTS sessions_del ON sessions;
+CREATE POLICY sessions_del ON sessions
   FOR DELETE TO authenticated USING (
     profile_id = current_profile_id() OR is_org_admin((SELECT organization_id FROM profiles WHERE id = profile_id LIMIT 1))
   );
@@ -190,5 +217,3 @@ BEGIN
   RETURN v_org_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-COMMIT;

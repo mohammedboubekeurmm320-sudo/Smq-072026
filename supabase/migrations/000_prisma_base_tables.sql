@@ -1,34 +1,8 @@
--- ============================================================================
--- QMS ISO 13485 Pro — Migration complète Supabase (PostgreSQL 15+)
--- ============================================================================
--- Généré automatiquement: Prisma tables + RLS multi-tenant + Audit blockchain
--- Date: 2026-07-11
---
--- INSTRUCTIONS: Copier-coller ce fichier dans le Supabase SQL Editor
--- (Dashboard → SQL Editor → New query) puis cliquer "Run"
---
--- Ce script crée:
---   1. Extensions PostgreSQL (pgcrypto)
---   2. 28 tables (27 modèles Prisma + audit_config)
---   3. Index et contraintes d'unicité
---   4. Politiques RLS multi-tenant (Row Level Security)
---   5. Fonctions helper (is_org_member, is_org_admin, current_profile_id)
---   6. Triggers d'audit trail (HMAC-SHA256 blockchain)
---   7. Protection immuabilité audit_trails (21 CFR Part 11)
--- ============================================================================
-
-BEGIN;
-
--- Extensions PostgreSQL
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
--- ============================================================================
--- PARTIE 1: Tables (généré par Prisma — snake_case via @map)
--- ============================================================================
-
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "organizations" (
+CREATE TABLE "organizations" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
@@ -41,7 +15,7 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "profiles" (
+CREATE TABLE "profiles" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "full_name" TEXT NOT NULL,
@@ -61,7 +35,7 @@ CREATE TABLE IF NOT EXISTS "profiles" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "organization_members" (
+CREATE TABLE "organization_members" (
     "id" TEXT NOT NULL,
     "organization_id" TEXT NOT NULL,
     "profile_id" TEXT NOT NULL,
@@ -74,7 +48,7 @@ CREATE TABLE IF NOT EXISTS "organization_members" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "sessions" (
+CREATE TABLE "sessions" (
     "id" TEXT NOT NULL,
     "token" TEXT NOT NULL,
     "profile_id" TEXT NOT NULL,
@@ -85,7 +59,7 @@ CREATE TABLE IF NOT EXISTS "sessions" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "departments" (
+CREATE TABLE "departments" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "label_fr" TEXT NOT NULL,
@@ -100,7 +74,7 @@ CREATE TABLE IF NOT EXISTS "departments" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "documents" (
+CREATE TABLE "documents" (
     "id" TEXT NOT NULL,
     "document_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -142,7 +116,7 @@ CREATE TABLE IF NOT EXISTS "documents" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "electronic_signatures" (
+CREATE TABLE "electronic_signatures" (
     "id" TEXT NOT NULL,
     "document_id" TEXT,
     "record_id" TEXT,
@@ -162,7 +136,7 @@ CREATE TABLE IF NOT EXISTS "electronic_signatures" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "document_prerequisites" (
+CREATE TABLE "document_prerequisites" (
     "id" TEXT NOT NULL,
     "organization_id" TEXT NOT NULL,
     "record_type" TEXT NOT NULL,
@@ -176,7 +150,7 @@ CREATE TABLE IF NOT EXISTS "document_prerequisites" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "document_triggers" (
+CREATE TABLE "document_triggers" (
     "id" TEXT NOT NULL,
     "source_document_id" TEXT NOT NULL,
     "target_document_id" TEXT NOT NULL,
@@ -190,7 +164,7 @@ CREATE TABLE IF NOT EXISTS "document_triggers" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "document_relationships" (
+CREATE TABLE "document_relationships" (
     "id" TEXT NOT NULL,
     "parent_document_id" TEXT NOT NULL,
     "child_document_id" TEXT NOT NULL,
@@ -202,7 +176,7 @@ CREATE TABLE IF NOT EXISTS "document_relationships" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "document_code_sequences" (
+CREATE TABLE "document_code_sequences" (
     "id" TEXT NOT NULL,
     "prefix" TEXT NOT NULL,
     "department_suffix" TEXT,
@@ -215,7 +189,7 @@ CREATE TABLE IF NOT EXISTS "document_code_sequences" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "form_templates" (
+CREATE TABLE "form_templates" (
     "id" TEXT NOT NULL,
     "document_id" TEXT,
     "title" TEXT NOT NULL,
@@ -241,7 +215,7 @@ CREATE TABLE IF NOT EXISTS "form_templates" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "form_instances" (
+CREATE TABLE "form_instances" (
     "id" TEXT NOT NULL,
     "template_id" TEXT NOT NULL,
     "template_version" TEXT,
@@ -268,7 +242,7 @@ CREATE TABLE IF NOT EXISTS "form_instances" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "capas" (
+CREATE TABLE "capas" (
     "id" TEXT NOT NULL,
     "capa_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -308,7 +282,7 @@ CREATE TABLE IF NOT EXISTS "capas" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "non_conformances" (
+CREATE TABLE "non_conformances" (
     "id" TEXT NOT NULL,
     "ncr_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -351,7 +325,7 @@ CREATE TABLE IF NOT EXISTS "non_conformances" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "deviations" (
+CREATE TABLE "deviations" (
     "id" TEXT NOT NULL,
     "dev_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -392,7 +366,7 @@ CREATE TABLE IF NOT EXISTS "deviations" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "change_controls" (
+CREATE TABLE "change_controls" (
     "id" TEXT NOT NULL,
     "cc_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -432,7 +406,7 @@ CREATE TABLE IF NOT EXISTS "change_controls" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "audits" (
+CREATE TABLE "audits" (
     "id" TEXT NOT NULL,
     "audit_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -457,7 +431,7 @@ CREATE TABLE IF NOT EXISTS "audits" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "risks" (
+CREATE TABLE "risks" (
     "id" TEXT NOT NULL,
     "risk_number" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -492,7 +466,7 @@ CREATE TABLE IF NOT EXISTS "risks" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "training" (
+CREATE TABLE "training" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT,
@@ -511,7 +485,7 @@ CREATE TABLE IF NOT EXISTS "training" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "batch_records" (
+CREATE TABLE "batch_records" (
     "id" TEXT NOT NULL,
     "lot_number" TEXT NOT NULL,
     "product_name" TEXT NOT NULL,
@@ -536,7 +510,7 @@ CREATE TABLE IF NOT EXISTS "batch_records" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "suppliers" (
+CREATE TABLE "suppliers" (
     "id" TEXT NOT NULL,
     "supplier_code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -569,7 +543,7 @@ CREATE TABLE IF NOT EXISTS "suppliers" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "audit_trails" (
+CREATE TABLE "audit_trails" (
     "id" TEXT NOT NULL,
     "sequence_number" INTEGER,
     "previous_hash" TEXT,
@@ -590,7 +564,7 @@ CREATE TABLE IF NOT EXISTS "audit_trails" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "record_type_definitions" (
+CREATE TABLE "record_type_definitions" (
     "id" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -618,7 +592,7 @@ CREATE TABLE IF NOT EXISTS "record_type_definitions" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "record_links" (
+CREATE TABLE "record_links" (
     "id" TEXT NOT NULL,
     "source_record_id" TEXT NOT NULL,
     "source_record_type" TEXT NOT NULL,
@@ -634,7 +608,7 @@ CREATE TABLE IF NOT EXISTS "record_links" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "custom_field_definitions" (
+CREATE TABLE "custom_field_definitions" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "label" TEXT NOT NULL,
@@ -650,7 +624,7 @@ CREATE TABLE IF NOT EXISTS "custom_field_definitions" (
 );
 
 -- CreateTable
-CREATE TABLE IF NOT EXISTS "scheduled_reports" (
+CREATE TABLE "scheduled_reports" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "report_type" TEXT NOT NULL,
@@ -855,454 +829,3 @@ ALTER TABLE "custom_field_definitions" ADD CONSTRAINT "custom_field_definitions_
 -- AddForeignKey
 ALTER TABLE "scheduled_reports" ADD CONSTRAINT "scheduled_reports_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- ============================================================================
--- PARTIE 2: RLS Multi-tenant + Fonctions helper
--- ============================================================================
-
--- ============================================================================
--- Migration 002 : RLS Multi-tenant + Fonctions helper
--- ============================================================================
--- Securite defensive en profondeur (defense in depth).
--- L'app accede a la DB via API routes (Prisma + service_role),
--- ces politiques RLS protegent en cas d'acces direct au client Supabase.
---
--- NOTE: Cette app utilise un auth custom (bcrypt + session cookie).
--- Les fonctions helper lisent l'ID utilisateur depuis:
---   1) JWT Supabase claim 'profile_id' (si Supabase Auth est active)
---   2) Variable locale 'app.user_id' (posee par les API routes)
--- ============================================================================
-
--- ============================================================================
--- Helper functions
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION current_profile_id()
-RETURNS TEXT AS $$
-DECLARE
-  v_claim_id TEXT;
-  v_setting_id TEXT;
-BEGIN
-  -- Essai 1: JWT claim profile_id
-  BEGIN
-    v_claim_id := (current_setting('request.jwt.claims', true)::json->>'profile_id');
-    IF v_claim_id IS NOT NULL AND v_claim_id != '' THEN RETURN v_claim_id; END IF;
-  EXCEPTION WHEN OTHERS THEN NULL; END;
-  -- Essai 2: Variable locale API
-  BEGIN
-    v_setting_id := current_setting('app.user_id', true);
-    IF v_setting_id IS NOT NULL AND v_setting_id != '' THEN RETURN v_setting_id; END IF;
-  EXCEPTION WHEN OTHERS THEN NULL; END;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql STABLE;
-
-CREATE OR REPLACE FUNCTION is_org_member(p_org_id TEXT)
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM organization_members
-    WHERE organization_id = p_org_id AND profile_id = current_profile_id() AND status = 'active'
-  );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
-CREATE OR REPLACE FUNCTION is_org_admin(p_org_id TEXT)
-RETURNS BOOLEAN AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM organization_members
-    WHERE organization_id = p_org_id AND profile_id = current_profile_id()
-      AND status = 'active' AND role IN ('owner', 'admin')
-  );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
-CREATE OR REPLACE FUNCTION current_org_id()
-RETURNS TEXT AS $$
-  SELECT organization_id FROM profiles
-  WHERE id = current_profile_id() AND active = true LIMIT 1;
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
-
--- ============================================================================
--- Enable RLS on ALL 27 data tables
--- ============================================================================
-
-DO $$
-DECLARE t TEXT;
-BEGIN
-  FOR t IN SELECT unnest(ARRAY[
-    'organizations','profiles','organization_members','sessions',
-    'departments','documents','electronic_signatures',
-    'document_prerequisites','document_triggers','document_relationships',
-    'document_code_sequences','form_templates','form_instances',
-    'capas','non_conformances','deviations','change_controls',
-    'audits','risks','training','batch_records','suppliers',
-    'audit_trails','record_type_definitions','record_links',
-    'custom_field_definitions','scheduled_reports'
-  ]) LOOP
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-  END LOOP;
-END $$;
-
--- ============================================================================
--- Standard RLS macro: 4 politiques CRUD par table
--- Compatible PG 14+ (DROP + CREATE au lieu de CREATE OR REPLACE)
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION create_std_rls(p_table TEXT)
-RETURNS VOID AS $$
-BEGIN
-  -- SELECT
-  EXECUTE format('DROP POLICY IF EXISTS %I_sel ON %I', p_table, p_table);
-  EXECUTE format('CREATE POLICY %I_sel ON %I FOR SELECT TO authenticated USING (is_org_member(organization_id))', p_table, p_table);
-  -- INSERT
-  EXECUTE format('DROP POLICY IF EXISTS %I_ins ON %I', p_table, p_table);
-  EXECUTE format('CREATE POLICY %I_ins ON %I FOR INSERT TO authenticated WITH CHECK (is_org_member(organization_id))', p_table, p_table);
-  -- UPDATE
-  EXECUTE format('DROP POLICY IF EXISTS %I_upd ON %I', p_table, p_table);
-  EXECUTE format('CREATE POLICY %I_upd ON %I FOR UPDATE TO authenticated USING (is_org_member(organization_id)) WITH CHECK (is_org_member(organization_id))', p_table, p_table);
-  -- DELETE
-  EXECUTE format('DROP POLICY IF EXISTS %I_del ON %I', p_table, p_table);
-  EXECUTE format('CREATE POLICY %I_del ON %I FOR DELETE TO authenticated USING (is_org_member(organization_id))', p_table, p_table);
-END;
-$$ LANGUAGE plpgsql;
-
--- 21 tables metier: politiques standard
-DO $$
-DECLARE t TEXT;
-BEGIN
-  FOR t IN SELECT unnest(ARRAY[
-    'documents','electronic_signatures','document_prerequisites',
-    'document_triggers','document_relationships','document_code_sequences',
-    'form_templates','form_instances',
-    'capas','non_conformances','deviations','change_controls',
-    'audits','risks','training','batch_records','suppliers',
-    'departments','record_links','custom_field_definitions','scheduled_reports'
-  ]) LOOP
-    PERFORM create_std_rls(t);
-  END LOOP;
-END $$;
-
--- ============================================================================
--- Tables avec politiques speciales
--- ============================================================================
-
--- audit_trails: INSERT + SELECT seulement (immuable)
-DROP POLICY IF EXISTS audit_trails_sel ON audit_trails;
-CREATE POLICY audit_trails_sel ON audit_trails
-  FOR SELECT TO authenticated USING (is_org_member(organization_id));
-DROP POLICY IF EXISTS audit_trails_ins ON audit_trails;
-CREATE POLICY audit_trails_ins ON audit_trails
-  FOR INSERT TO authenticated WITH CHECK (is_org_member(organization_id));
-
--- record_type_definitions: lecture membres, ecriture admin
-DROP POLICY IF EXISTS rtd_sel ON record_type_definitions;
-CREATE POLICY rtd_sel ON record_type_definitions
-  FOR SELECT TO authenticated USING (is_org_member(organization_id));
-DROP POLICY IF EXISTS rtd_ins ON record_type_definitions;
-CREATE POLICY rtd_ins ON record_type_definitions
-  FOR INSERT TO authenticated WITH CHECK (is_org_admin(organization_id));
-DROP POLICY IF EXISTS rtd_upd ON record_type_definitions;
-CREATE POLICY rtd_upd ON record_type_definitions
-  FOR UPDATE TO authenticated USING (is_org_admin(organization_id)) WITH CHECK (is_org_admin(organization_id));
-DROP POLICY IF EXISTS rtd_del ON record_type_definitions;
-CREATE POLICY rtd_del ON record_type_definitions
-  FOR DELETE TO authenticated USING (is_org_admin(organization_id));
-
--- organizations: membre=lecture, libre=creation, admin=update, owner=delete
-DROP POLICY IF EXISTS orgs_sel ON organizations;
-CREATE POLICY orgs_sel ON organizations
-  FOR SELECT TO authenticated USING (is_org_member(id));
-DROP POLICY IF EXISTS orgs_ins ON organizations;
-CREATE POLICY orgs_ins ON organizations
-  FOR INSERT TO authenticated WITH CHECK (true);
-DROP POLICY IF EXISTS orgs_upd ON organizations;
-CREATE POLICY orgs_upd ON organizations
-  FOR UPDATE TO authenticated USING (is_org_admin(id)) WITH CHECK (is_org_admin(id));
-DROP POLICY IF EXISTS orgs_del ON organizations;
-CREATE POLICY orgs_del ON organizations
-  FOR DELETE TO authenticated USING (
-    EXISTS (SELECT 1 FROM organization_members WHERE organization_id = id AND profile_id = current_profile_id() AND role = 'owner' AND status = 'active')
-  );
-
--- profiles: son profil ou profil de son org
-DROP POLICY IF EXISTS profiles_sel ON profiles;
-CREATE POLICY profiles_sel ON profiles
-  FOR SELECT TO authenticated USING (id = current_profile_id() OR is_org_member(organization_id));
-DROP POLICY IF EXISTS profiles_ins ON profiles;
-CREATE POLICY profiles_ins ON profiles
-  FOR INSERT TO authenticated WITH CHECK (id = current_profile_id());
-DROP POLICY IF EXISTS profiles_upd ON profiles;
-CREATE POLICY profiles_upd ON profiles
-  FOR UPDATE TO authenticated USING (id = current_profile_id() OR is_org_admin(organization_id))
-  WITH CHECK (id = current_profile_id() OR is_org_admin(organization_id));
-
--- organization_members
-DROP POLICY IF EXISTS om_sel ON organization_members;
-CREATE POLICY om_sel ON organization_members
-  FOR SELECT TO authenticated USING (profile_id = current_profile_id() OR is_org_member(organization_id));
-DROP POLICY IF EXISTS om_ins ON organization_members;
-CREATE POLICY om_ins ON organization_members
-  FOR INSERT TO authenticated WITH CHECK (profile_id = current_profile_id() OR is_org_admin(organization_id));
-DROP POLICY IF EXISTS om_upd ON organization_members;
-CREATE POLICY om_upd ON organization_members
-  FOR UPDATE TO authenticated USING (is_org_admin(organization_id)) WITH CHECK (is_org_admin(organization_id));
-DROP POLICY IF EXISTS om_del ON organization_members;
-CREATE POLICY om_del ON organization_members
-  FOR DELETE TO authenticated USING (is_org_admin(organization_id));
-
--- sessions: proprietaire ou admin de l'org
-DROP POLICY IF EXISTS sessions_sel ON sessions;
-CREATE POLICY sessions_sel ON sessions
-  FOR SELECT TO authenticated USING (
-    profile_id = current_profile_id() OR is_org_admin((SELECT organization_id FROM profiles WHERE id = profile_id LIMIT 1))
-  );
-DROP POLICY IF EXISTS sessions_ins ON sessions;
-CREATE POLICY sessions_ins ON sessions
-  FOR INSERT TO authenticated WITH CHECK (true);
-DROP POLICY IF EXISTS sessions_del ON sessions;
-CREATE POLICY sessions_del ON sessions
-  FOR DELETE TO authenticated USING (
-    profile_id = current_profile_id() OR is_org_admin((SELECT organization_id FROM profiles WHERE id = profile_id LIMIT 1))
-  );
-
--- ============================================================================
--- create_organization_for_user
--- ============================================================================
-CREATE OR REPLACE FUNCTION create_organization_for_user(
-  p_user_id TEXT, p_name TEXT, p_slug TEXT, p_settings JSONB DEFAULT '{}'
-) RETURNS TEXT AS $$
-DECLARE v_org_id TEXT;
-BEGIN
-  INSERT INTO organizations (name, slug, settings)
-  VALUES (p_name, p_slug, p_settings) RETURNING id INTO v_org_id;
-  INSERT INTO organization_members (organization_id, profile_id, role, status)
-  VALUES (v_org_id, p_user_id, 'owner', 'active');
-  UPDATE profiles SET organization_id = v_org_id, updated_at = now() WHERE id = p_user_id;
-  RETURN v_org_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- ============================================================================
--- PARTIE 3: Audit Trail Triggers — Blockchain HMAC-SHA256
--- ============================================================================
-
--- ============================================================================
--- Migration 003 : Audit Trail Triggers — Blockchain HMAC-SHA256
--- ============================================================================
--- Conformite: ISO 13485 4.2.4 / 21 CFR Part 11 11.10(e)
---
--- 1. log_audit_trail: trigger generique sur toutes les tables metier
--- 2. compute_audit_hash: hash HMAC-SHA256 chaine (blockchain)
--- 3. block_audit_trails_modification: immuabilite (UPDATE/DELETE bloques)
--- 4. verify_audit_integrity: verification de la chaine
--- 5. enforce_maker_checker: separation des taches (21 CFR Part 11 11.10(g))
--- ============================================================================
-
-
--- ============================================================================
--- 1. log_audit_trail
--- ============================================================================
-CREATE OR REPLACE FUNCTION log_audit_trail()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_org_id      TEXT;
-  v_action      TEXT;
-  v_user_id     TEXT;
-  v_user_email  TEXT;
-  v_record_id   TEXT;
-  v_old_vals    JSONB;
-  v_new_vals    JSONB;
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    v_action := 'CREATE'; v_record_id := NEW.id;
-    v_old_vals := NULL; v_new_vals := to_jsonb(NEW);
-  ELSIF TG_OP = 'UPDATE' THEN
-    v_action := 'UPDATE'; v_record_id := NEW.id;
-    v_old_vals := to_jsonb(OLD); v_new_vals := to_jsonb(NEW);
-  ELSIF TG_OP = 'DELETE' THEN
-    v_action := 'DELETE'; v_record_id := OLD.id;
-    v_old_vals := to_jsonb(OLD); v_new_vals := NULL;
-  ELSE
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-
-  -- organization_id
-  BEGIN v_org_id := NEW.organization_id; EXCEPTION WHEN OTHERS THEN
-    BEGIN v_org_id := OLD.organization_id; EXCEPTION WHEN OTHERS THEN
-      v_org_id := current_org_id();
-    END;
-  END;
-
-  -- user
-  v_user_id := current_profile_id();
-  IF v_user_id IS NOT NULL THEN
-    SELECT email INTO v_user_email FROM profiles WHERE id = v_user_id;
-  END IF;
-
-  BEGIN
-    INSERT INTO audit_trails (
-      audit_action, table_name, record_id,
-      user_id, user_email, old_values_json, new_values_json, organization_id
-    ) VALUES (
-      v_action, TG_TABLE_NAME, v_record_id,
-      v_user_id, v_user_email, v_old_vals, v_new_vals, v_org_id
-    );
-  EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'Audit trail insert failed for %.%: %', TG_TABLE_SCHEMA, TG_TABLE_NAME, SQLERRM;
-  END;
-
-  RETURN COALESCE(NEW, OLD);
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- ============================================================================
--- 2. compute_audit_hash
--- ============================================================================
-CREATE OR REPLACE FUNCTION compute_audit_hash()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_salt       TEXT;
-  v_prev_hash  TEXT;
-  v_prev_seq   BIGINT;
-  v_canonical  TEXT;
-  v_hash       TEXT;
-BEGIN
-  SELECT signing_salt INTO v_salt FROM audit_config WHERE id = 'singleton';
-  IF v_salt IS NULL THEN v_salt := 'FALLBACK-DEV-ONLY-CHANGE-IN-PRODUCTION'; END IF;
-
-  SELECT sequence_number, hash INTO v_prev_seq, v_prev_hash
-  FROM audit_trails WHERE organization_id = NEW.organization_id
-  ORDER BY sequence_number DESC NULLS LAST LIMIT 1;
-
-  NEW.sequence_number := COALESCE(v_prev_seq, 0) + 1;
-  NEW.previous_hash   := COALESCE(v_prev_hash, 'GENESIS');
-
-  v_canonical := json_build_object(
-    'seq', NEW.sequence_number, 'action', NEW.audit_action,
-    'table', NEW.table_name, 'record_id', NEW.record_id,
-    'user_id', NEW.user_id, 'org_id', NEW.organization_id,
-    'prev_hash', NEW.previous_hash, 'timestamp', NEW.created_at
-  )::text;
-
-  v_hash := encode(hmac(v_canonical::bytea, v_salt::bytea, 'sha256'), 'hex');
-  NEW.hash := v_hash;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS trg_compute_audit_hash ON audit_trails;
-CREATE TRIGGER trg_compute_audit_hash
-  BEFORE INSERT ON audit_trails FOR EACH ROW EXECUTE FUNCTION compute_audit_hash();
-
--- ============================================================================
--- 3. Immuabilite audit_trails
--- ============================================================================
-CREATE OR REPLACE FUNCTION block_audit_trails_modification()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF current_user = 'supabase_admin' OR current_user = 'postgres' THEN RETURN OLD; END IF;
-  RAISE EXCEPTION 'audit_trails est en lecture seule (21 CFR Part 11 11.10(e))';
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS trg_block_audit_update ON audit_trails;
-DROP TRIGGER IF EXISTS trg_block_audit_delete ON audit_trails;
-CREATE TRIGGER trg_block_audit_update
-  BEFORE UPDATE ON audit_trails FOR EACH ROW EXECUTE FUNCTION block_audit_trails_modification();
-CREATE TRIGGER trg_block_audit_delete
-  BEFORE DELETE ON audit_trails FOR EACH ROW EXECUTE FUNCTION block_audit_trails_modification();
-
--- ============================================================================
--- Attacher log_audit_trail aux 25 tables metier
--- ============================================================================
-DO $$
-DECLARE t TEXT;
-BEGIN
-  FOR t IN SELECT unnest(ARRAY[
-    'organizations','profiles','organization_members',
-    'departments','documents','electronic_signatures',
-    'document_prerequisites','document_triggers','document_relationships',
-    'document_code_sequences','form_templates','form_instances',
-    'capas','non_conformances','deviations','change_controls',
-    'audits','risks','training','batch_records','suppliers',
-    'record_type_definitions','record_links',
-    'custom_field_definitions','scheduled_reports'
-  ]) LOOP
-    EXECUTE format(
-      'DROP TRIGGER IF EXISTS trg_audit_%I ON %I; '||
-      'CREATE TRIGGER trg_audit_%I AFTER INSERT OR UPDATE OR DELETE ON %I '||
-      'FOR EACH ROW EXECUTE FUNCTION log_audit_trail();',
-      t, t, t, t
-    );
-  END LOOP;
-END $$;
-
--- ============================================================================
--- 4. verify_audit_integrity
--- ============================================================================
-CREATE OR REPLACE FUNCTION verify_audit_integrity(p_org_id TEXT)
-RETURNS TABLE(is_valid BOOLEAN, broken_sequence BIGINT, total_entries BIGINT) AS $$
-DECLARE
-  v_salt      TEXT;
-  v_prev_hash TEXT := 'GENESIS';
-  v_entry     RECORD;
-  v_canonical TEXT;
-  v_expected  TEXT;
-  v_count     BIGINT := 0;
-BEGIN
-  SELECT signing_salt INTO v_salt FROM audit_config WHERE id = 'singleton';
-
-  FOR v_entry IN
-    SELECT sequence_number, hash, previous_hash, audit_action, table_name,
-           record_id, user_id, created_at
-    FROM audit_trails WHERE organization_id = p_org_id
-    ORDER BY sequence_number ASC
-  LOOP
-    v_count := v_count + 1;
-    IF v_entry.previous_hash != v_prev_hash THEN
-      RETURN QUERY SELECT false, v_entry.sequence_number, v_count; RETURN;
-    END IF;
-    v_canonical := json_build_object(
-      'seq', v_entry.sequence_number, 'action', v_entry.audit_action,
-      'table', v_entry.table_name, 'record_id', v_entry.record_id,
-      'user_id', v_entry.user_id, 'org_id', p_org_id,
-      'prev_hash', v_entry.previous_hash, 'timestamp', v_entry.created_at
-    )::text;
-    v_expected := encode(hmac(v_canonical::bytea, v_salt::bytea, 'sha256'), 'hex');
-    IF v_entry.hash != v_expected THEN
-      RETURN QUERY SELECT false, v_entry.sequence_number, v_count; RETURN;
-    END IF;
-    v_prev_hash := v_entry.hash;
-  END LOOP;
-
-  RETURN QUERY SELECT true, NULL::BIGINT, v_count; RETURN;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- ============================================================================
--- 5. enforce_maker_checker
--- ============================================================================
-CREATE OR REPLACE FUNCTION enforce_maker_checker()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.approved_by_id IS NOT NULL AND NEW.created_by_id IS NOT NULL
-     AND NEW.approved_by_id = NEW.created_by_id THEN
-    RAISE EXCEPTION 'Violation maker-checker: approbateur = createur (21 CFR Part 11 11.10(g))';
-  END IF;
-  IF NEW.approved_by_id IS NOT NULL AND NEW.approved_at IS NULL THEN
-    NEW.approved_at := now();
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-
-COMMIT;
-
--- ============================================================================
--- Vérification post-migration
--- ============================================================================
-SELECT 'Migration terminée avec succès!' AS status;
-SELECT count(*) AS tables_created FROM information_schema.tables 
-  WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
-SELECT count(*) AS rls_policies FROM pg_policies 
-  WHERE schemaname = 'public';
-SELECT count(*) AS triggers FROM pg_trigger 
-  WHERE NOT tgisinternal;
