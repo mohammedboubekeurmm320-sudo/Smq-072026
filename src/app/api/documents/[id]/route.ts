@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { toCamelCase } from '@/lib/db'
 import { getServerSession, hasPermission } from '@/lib/auth-server'
 import { apiSuccess, apiError, logAudit } from '@/lib/api-helpers'
 
@@ -10,14 +12,38 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const session = await getServerSession()
     if (!session) return apiError('Non authentifié', 401)
     const { id } = await params
-    const doc = await db.document.findFirst({
-      where: { id, organizationId: session.profile.organizationId },
-      include: {
-        author: { select: { id: true, fullName: true } },
-        approver: { select: { id: true, fullName: true } },
-      },
-    })
-    if (!doc) return apiError('Document introuvable', 404)
+
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('id', id)
+      .eq('organization_id', session.profile.organizationId)
+      .limit(1)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!data) return apiError('Document introuvable', 404)
+
+    const doc = toCamelCase(data) as any
+
+    // Fetch author and approver profiles
+    const profileIds: string[] = []
+    if (doc.authorId) profileIds.push(doc.authorId)
+    if (doc.approverId) profileIds.push(doc.approverId)
+
+    if (profileIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id,full_name')
+        .in('id', profileIds)
+      const profileMap = new Map<string, any>()
+      for (const p of (profiles || [])) profileMap.set(p.id, toCamelCase(p))
+      doc.author = doc.authorId ? profileMap.get(doc.authorId) || null : null
+      doc.approver = doc.approverId ? profileMap.get(doc.approverId) || null : null
+    } else {
+      doc.author = null
+      doc.approver = null
+    }
+
     return apiSuccess({ document: doc })
   } catch (e: any) { return apiError(e.message, 500) }
 }

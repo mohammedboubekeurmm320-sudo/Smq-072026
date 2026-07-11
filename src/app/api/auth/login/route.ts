@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { toCamelCase } from '@/lib/db'
 import { verifyPassword, createSession, setSessionCookie } from '@/lib/auth-server'
 import { apiSuccess, apiError, logAudit, parseJson } from '@/lib/api-helpers'
 
@@ -8,11 +10,21 @@ export async function POST(req: NextRequest) {
     const { email, password } = await req.json()
     if (!email || !password) return apiError('Email et mot de passe requis', 400)
 
-    const profile = await db.profile.findUnique({
-      where: { email: String(email).toLowerCase().trim() },
-      include: { organization: true },
-    })
-    if (!profile || !profile.active) return apiError('Identifiants invalides', 401)
+    // Use direct Supabase query for the join with organization
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        organizations!profiles_organization_id_fkey(id, name, slug, settings)
+      `)
+      .eq('email', String(email).toLowerCase().trim())
+      .limit(1)
+      .single()
+
+    if (error || !data) return apiError('Identifiants invalides', 401)
+
+    const profile = toCamelCase(data) as any
+    if (!profile.active) return apiError('Identifiants invalides', 401)
     if (!await verifyPassword(password, profile.passwordHash)) return apiError('Identifiants invalides', 401)
 
     const token = await createSession(profile.id)
@@ -20,7 +32,7 @@ export async function POST(req: NextRequest) {
     await logAudit(profile.organizationId, 'LOGIN', 'profiles', profile.id, profile.id, profile.email)
 
     // Parse org settings so they're available immediately (avoid timing issues)
-    const orgSettings = parseJson(profile.organization.settings, { setup_completed: true, active_modules: [], applicable_standards: [], industry_type: 'medical_device' })
+    const orgSettings = parseJson(profile.organizations.settings, { setup_completed: true, active_modules: [], applicable_standards: [], industry_type: 'medical_device' })
 
     return apiSuccess({
       profile: {
@@ -28,7 +40,7 @@ export async function POST(req: NextRequest) {
         department: profile.department, jobTitle: profile.jobTitle, organizationId: profile.organizationId,
       },
       organization: {
-        id: profile.organization.id, name: profile.organization.name, slug: profile.organization.slug,
+        id: profile.organizations.id, name: profile.organizations.name, slug: profile.organizations.slug,
         settings: orgSettings,
       },
     })

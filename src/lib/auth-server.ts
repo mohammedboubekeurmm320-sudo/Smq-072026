@@ -1,4 +1,6 @@
 import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { toCamelCase } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import { cookies } from 'next/headers'
 import { randomUUID } from 'crypto'
@@ -60,21 +62,30 @@ export async function getServerSession(): Promise<ServerSession | null> {
     const token = cookieStore.get(SESSION_COOKIE)?.value
     if (!token) return null
 
-    const session = await db.session.findUnique({
-      where: { token },
-      include: {
-        profile: {
-          select: { id: true, email: true, fullName: true, role: true, department: true, jobTitle: true, organizationId: true, active: true, organization: true }
-        }
-      },
-    })
-    if (!session) return null
-    if (session.expiresAt < new Date()) {
-      await db.session.delete({ where: { id: session.id } })
+    // Direct Supabase query for nested join: session → profile → organization
+    const { data, error } = await supabase
+      .from('sessions')
+      .select(`
+        id, token, expires_at, profile_id,
+        profiles!sessions_profile_id_fkey(
+          id, email, full_name, role, department, job_title, organization_id, active,
+          organizations!profiles_organization_id_fkey(id, name, slug, settings)
+        )
+      `)
+      .eq('token', token)
+      .limit(1)
+      .single()
+
+    if (error || !data) return null
+
+    const sessionRow = toCamelCase(data) as any
+    if (new Date(sessionRow.expiresAt) < new Date()) {
+      await db.session.delete({ where: { id: sessionRow.id } })
       return null
     }
-    const p = session.profile
-    if (!p.active) return null
+
+    const p = sessionRow.profiles
+    if (!p || !p.active) return null
 
     return {
       profile: {
@@ -82,8 +93,8 @@ export async function getServerSession(): Promise<ServerSession | null> {
         department: p.department, jobTitle: p.jobTitle, organizationId: p.organizationId,
       },
       organization: {
-        id: p.organization.id, name: p.organization.name, slug: p.organization.slug,
-        settings: parseSettings(p.organization.settings),
+        id: p.organizations.id, name: p.organizations.name, slug: p.organizations.slug,
+        settings: parseSettings(p.organizations.settings),
       }
     }
   } catch (e) {

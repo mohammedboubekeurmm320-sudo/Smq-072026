@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { toCamelCase } from '@/lib/db'
 import { getServerSession, hasPermission } from '@/lib/auth-server'
 import { apiSuccess, apiError, logAudit, parseJson } from '@/lib/api-helpers'
 
@@ -12,23 +14,51 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type')
     const search = searchParams.get('q')
 
-    const where: any = { organizationId: session.profile.organizationId }
-    if (status) where.status = status
-    if (type) where.docType = type
+    let query = supabase
+      .from('documents')
+      .select('*')
+      .eq('organization_id', session.profile.organizationId)
+
+    if (status) query = query.eq('status', status)
+    if (type) query = query.eq('doc_type', type)
     if (search) {
-      where.OR = [
-        { title: { contains: search } }, { documentNumber: { contains: search } }, { code: { contains: search } },
-      ]
+      query = query.or(`title.ilike.%${search}%,document_number.ilike.%${search}%,code.ilike.%${search}%`)
     }
 
-    const documents = await db.document.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        author: { select: { id: true, fullName: true } },
-        approver: { select: { id: true, fullName: true } },
-      },
-    })
+    query = query.order('updated_at', { ascending: false })
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    // Collect unique author/approver IDs and fetch profiles
+    const documents = (data || []).map(toCamelCase) as any[]
+    const profileIds = new Set<string>()
+    for (const doc of documents) {
+      if (doc.authorId) profileIds.add(doc.authorId)
+      if (doc.approverId) profileIds.add(doc.approverId)
+    }
+
+    if (profileIds.size > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id,full_name')
+        .in('id', Array.from(profileIds))
+
+      const profileMap = new Map<string, any>()
+      for (const p of (profiles || [])) {
+        profileMap.set(p.id, toCamelCase(p))
+      }
+      for (const doc of documents) {
+        doc.author = doc.authorId ? profileMap.get(doc.authorId) || null : null
+        doc.approver = doc.approverId ? profileMap.get(doc.approverId) || null : null
+      }
+    } else {
+      for (const doc of documents) {
+        doc.author = null
+        doc.approver = null
+      }
+    }
+
     return apiSuccess({ documents })
   } catch (e: any) { return apiError(e.message, 500) }
 }
@@ -40,9 +70,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     if (!body.title || !body.documentNumber) return apiError('Titre et numéro requis', 400)
 
-    const existing = await db.document.findUnique({
-      where: { organizationId_documentNumber: { organizationId: session.profile.organizationId, documentNumber: body.documentNumber } },
-    })
+    // Check unique constraint
+    const { data: existing, error: checkError } = await supabase
+      .from('documents')
+      .select('id')
+      .eq('organization_id', session.profile.organizationId)
+      .eq('document_number', body.documentNumber)
+      .limit(1)
+      .maybeSingle()
+    if (checkError) throw new Error(checkError.message)
     if (existing) return apiError('Numéro de document déjà utilisé', 409)
 
     const doc = await db.document.create({
