@@ -79,3 +79,4 @@ _backup/
 # Temporary files
 *.tmp
 *.temp
+.env
