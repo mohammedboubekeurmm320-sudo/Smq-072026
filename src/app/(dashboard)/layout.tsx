@@ -19,13 +19,13 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard, Shield, AlertTriangle, AlertOctagon, ArrowLeftRight,
   ClipboardCheck, FileText, GraduationCap, Package, Truck, BarChart3,
-  History, Bell, Search as SearchIcon,
+  History, Bell, Search as SearchIcon, ShieldCheck, Settings,
 } from 'lucide-react'
 
 const ICON_MAP: Record<string, any> = {
   LayoutDashboard, Shield, AlertTriangle, AlertOctagon, ArrowLeftRight,
   ClipboardCheck, FileText, GraduationCap, Package, Truck, BarChart3,
-  History, Bell, Search: SearchIcon,
+  History, Bell, Search: SearchIcon, ShieldCheck, Settings,
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -128,6 +128,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     ? '/notifications'
                     : item.slug === 'deadlines'
                     ? '/deadlines'
+                    : item.slug === 'compliance'
+                    ? '/compliance'
+                    : item.slug === 'admin-settings'
+                    ? '/admin/settings'
                     : `/qms/${item.slug}`
 
                   const isActive = pathname === href || pathname?.startsWith(href + '/')

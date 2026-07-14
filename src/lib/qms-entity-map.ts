@@ -125,10 +125,12 @@ export const SIDEBAR_NAV: NavGroup[] = [
     ],
   },
   {
-    label: 'Administration',
+    label: 'Conformité & Admin',
     items: [
+      { slug: 'compliance', label: 'Conformité', icon: 'ShieldCheck' },
       { slug: 'audit-trail', label: 'Piste d\'audit', icon: 'History' },
       { slug: 'notifications', label: 'Notifications', icon: 'Bell' },
+      { slug: 'admin-settings', label: 'Paramètres', icon: 'Settings' },
     ],
   },
 ]

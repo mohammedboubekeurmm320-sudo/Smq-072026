@@ -9,9 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, ArrowLeft, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { getEntityConfig } from '@/lib/qms-entity-map'
 import { getStatusColor, STATUS_COLORS } from '@/lib/status-colors'
+import { exportToCsv } from '@/lib/export-csv'
 
 export default function EntityListPage() {
   const params = useParams()
@@ -32,6 +33,16 @@ export default function EntityListPage() {
   })
 
   if (!entityConfig) return <div className="p-6">Entité non reconnue : {entity}</div>
+
+  const handleExport = () => {
+    if (items.length === 0) return
+    // Remove internal fields for export
+    const clean = items.map(item => {
+      const { id: _id, organization_id: _o, created_by: _cb, password_hash: _ph, ...rest } = item as any
+      return rest
+    })
+    exportToCsv(clean, entityConfig.labelPlural.replace(/\s+/g, '_'))
+  }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Supprimer cet enregistrement ?')) return
@@ -63,7 +74,11 @@ export default function EntityListPage() {
           <h1 className="text-2xl font-bold">{entityConfig.labelPlural}</h1>
           <p className="text-sm text-muted-foreground">{entityConfig.description} · {total} enregistrement(s)</p>
         </div>
-        <Button onClick={() => router.push(`/qms/${entity}/new`)}>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={items.length === 0}>
+            <Download className="h-4 w-4 mr-2" /> Exporter
+          </Button>
+          <Button onClick={() => router.push(`/qms/${entity}/new`)}>
           <Plus className="h-4 w-4 mr-2" /> Nouveau
         </Button>
       </div>
