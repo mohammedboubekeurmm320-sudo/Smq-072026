@@ -1,52 +1,82 @@
 'use client'
+// ============================================================
+// AuthContext: Custom auth (remplace Supabase Auth)
+// Gère login/logout/session/switch org
+// ============================================================
 
-import { createContext, useContext, useEffect, useState, type ReactNode, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api-client'
-import { rolePermissions, type UserRole, type Permission, type OrgSettings, type SessionUser } from '@/types/qms'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
-interface AuthContextValue {
-  profile: {
-    id: string; email: string; fullName: string; role: UserRole
-    department?: string | null; jobTitle?: string | null
-    organizationId: string
-  } | null
-  organization: {
-    id: string; name: string; slug: string
-    settings: OrgSettings
-  } | null
-  loading: boolean
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
-  signup: (email: string, password: string, fullName: string, orgName: string, industry: any) => Promise<{ ok: boolean; error?: string }>
-  logout: () => Promise<void>
-  hasPermission: (perm: Permission) => boolean
-  hasRole: (...roles: UserRole[]) => boolean
-  refreshSession: () => Promise<void>
-  user: SessionUser | null
-  updateOrgSettings: (settings: Partial<OrgSettings>) => Promise<void>
+interface User {
+  id: string
+  email: string
+  full_name: string
+  role: string
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+interface Membership {
+  organization_id: string
+  role: string
+  organization: { id: string; name: string }
+}
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<AuthContextValue['profile']>(null)
-  const [organization, setOrganization] = useState<AuthContextValue['organization']>(null)
+interface AuthContextType {
+  user: User | null
+  memberships: Membership[]
+  currentOrgId: string | null
+  currentOrgName: string | null
+  loading: boolean
+  error: string | null
+  login: (email: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  switchOrg: (orgId: string) => Promise<void>
+  refreshSession: () => Promise<void>
+  isAuthenticated: boolean
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [memberships, setMemberships] = useState<Membership[]>([])
+  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
+  const [currentOrgName, setCurrentOrgName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
 
   const refreshSession = useCallback(async () => {
     try {
-      const data = await api.auth.session()
-      if (data?.session) {
-        setProfile(data.session.profile)
-        setOrganization(data.session.organization)
-      } else {
-        setProfile(null)
-        setOrganization(null)
+      setLoading(true)
+      setError(null)
+      const res = await fetch('/api/auth/session')
+      if (res.status === 401) {
+        setUser(null)
+        setMemberships([])
+        return
+      }
+      const data = await res.json()
+      if (data.authenticated && data.profile) {
+        const p = data.profile
+        setUser({
+          id: p.profile_id || p.id,
+          email: p.email,
+          full_name: p.full_name,
+          role: p.org_role || 'member',
+        })
+        setMemberships(data.memberships || [])
+
+        // Déterminer l'org courante
+        const cookieOrg = document.cookie
+          .split('; ')
+          .find(c => c.startsWith('current_org_id='))
+          ?.split('=')[1]
+
+        const orgId = cookieOrg || p.organization_id || data.memberships?.[0]?.organization_id
+        setCurrentOrgId(orgId)
+        const org = data.memberships?.find((m: Membership) => m.organization_id === orgId)
+        setCurrentOrgName(org?.organization?.name || p.organization_name || null)
       }
     } catch {
-      setProfile(null)
-      setOrganization(null)
+      setError('Erreur de session')
     } finally {
       setLoading(false)
     }
@@ -57,93 +87,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshSession])
 
   const login = async (email: string, password: string) => {
-    try {
-      const data = await api.auth.login(email, password)
-      // Use data directly instead of re-fetching session (avoids cookie timing issues)
-      if (data?.profile) {
-        // Fetch full org settings via session endpoint (cookie is now set)
-        try {
-          const sessionData = await api.auth.session()
-          if (sessionData?.session) {
-            setProfile(sessionData.session.profile)
-            setOrganization(sessionData.session.organization)
-          } else {
-            // Fallback to login response data
-            setProfile(data.profile)
-            setOrganization(data.organization as any)
-          }
-        } catch {
-          // Fallback to login response data
-          setProfile(data.profile)
-          setOrganization(data.organization as any)
-        }
-      }
-      return { ok: true }
-    } catch (e: any) {
-      return { ok: false, error: e.message || 'Erreur' }
-    }
-  }
-
-  const signup = async (email: string, password: string, fullName: string, orgName: string, industry: any) => {
-    try {
-      const data = await api.auth.signup(email, password, fullName, orgName, industry)
-      if (data?.profile) {
-        setProfile(data.profile)
-        setOrganization(data.organization as any)
-        // Try to fetch full session (with settings) after a short delay
-        setTimeout(async () => {
-          try {
-            const sessionData = await api.auth.session()
-            if (sessionData?.session) {
-              setProfile(sessionData.session.profile)
-              setOrganization(sessionData.session.organization)
-            }
-          } catch {}
-        }, 100)
-      }
-      return { ok: true }
-    } catch (e: any) {
-      return { ok: false, error: e.message || 'Erreur' }
-    }
+    setError(null)
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erreur de connexion')
+    await refreshSession()
   }
 
   const logout = async () => {
-    try { await api.auth.logout() } catch {}
-    setProfile(null)
-    setOrganization(null)
-    router.push('/')
+    await fetch('/api/auth/logout', { method: 'POST' })
+    setUser(null)
+    setMemberships([])
+    setCurrentOrgId(null)
+    window.location.href = '/login'
   }
 
-  const hasPermission = (perm: Permission): boolean => {
-    if (!profile) return false
-    return (rolePermissions[profile.role] || []).includes(perm)
+  const switchOrg = async (orgId: string) => {
+    const res = await fetch('/api/auth/switch-org', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgId }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
+    setCurrentOrgId(orgId)
+    const org = memberships.find(m => m.organization_id === orgId)
+    setCurrentOrgName(org?.organization?.name || null)
+    // Recharger la page pour rafraîchir les données
+    window.location.reload()
   }
-
-  const hasRole = (...roles: UserRole[]): boolean => {
-    if (!profile) return false
-    return roles.includes(profile.role)
-  }
-
-  const updateOrgSettings = async (settings: Partial<OrgSettings>) => {
-    if (!organization) return
-    try {
-      await api.organizations.update({ settings })
-      await refreshSession()
-    } catch (e: any) {
-      console.error('updateOrgSettings error:', e)
-    }
-  }
-
-  const user: SessionUser | null = profile && organization ? {
-    id: profile.id, email: profile.email, fullName: profile.fullName,
-    role: profile.role, department: profile.department, jobTitle: profile.jobTitle,
-    organizationId: organization.id, organizationName: organization.name, organizationSlug: organization.slug,
-    orgSettings: organization.settings,
-    hasPermission,
-  } : null
 
   return (
-    <AuthContext.Provider value={{ profile, organization, loading, login, signup, logout, hasPermission, hasRole, refreshSession, user, updateOrgSettings }}>
+    <AuthContext.Provider
+      value={{
+        user, memberships, currentOrgId, currentOrgName,
+        loading, error,
+        login, logout, switchOrg, refreshSession,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
@@ -154,3 +140,5 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }
+
+export default AuthContext

@@ -1,19 +1,30 @@
-import { NextResponse } from 'next/server'
-import { clearSessionCookie, destroySession, getServerSession } from '@/lib/auth-server'
-import { db } from '@/lib/db'
-import { apiSuccess } from '@/lib/api-helpers'
-import { logAudit } from '@/lib/api-helpers'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function POST() {
-  const session = await getServerSession()
-  if (session) {
-    await db.session.deleteMany({ where: { profileId: session.profile.id } }).catch(() => {})
-    await logAuditSafe(session.profile.organizationId, 'LOGIN', 'profiles', session.profile.id, session.profile.id, session.profile.email)
+export async function POST(request: NextRequest) {
+  const sessionCookie = request.cookies.get('session')
+
+  if (sessionCookie?.value) {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(sessionCookie.value, 'base64').toString()
+      )
+      // Supprimer la session DB
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+      await supabase
+        .from('sessions')
+        .delete()
+        .eq('profile_id', payload.sub)
+    } catch {
+      // Ignorer les erreurs de nettoyage
+    }
   }
-  await clearSessionCookie()
-  return apiSuccess({ ok: true })
-}
 
-async function logAuditSafe(orgId: string, action: any, table: string, recordId: string, userId?: string, userEmail?: string) {
-  try { await logAudit(orgId, action, table, recordId, userId, userEmail) } catch {}
+  const response = NextResponse.json({ success: true })
+  response.cookies.set('session', '', { maxAge: 0, path: '/' })
+  response.cookies.set('current_org_id', '', { maxAge: 0, path: '/' })
+  return response
 }

@@ -1,50 +1,133 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { supabase } from '@/lib/supabase'
-import { toCamelCase } from '@/lib/db'
-import { verifyPassword, createSession, setSessionCookie } from '@/lib/auth-server'
-import { apiSuccess, apiError, logAudit, parseJson } from '@/lib/api-helpers'
+// ============================================================
+// LOGIN API: Custom auth avec bcrypt + base64 session cookie
+// ============================================================
 
-export async function POST(req: NextRequest) {
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await req.json()
-    if (!email || !password) return apiError('Email et mot de passe requis', 400)
+    const { email, password } = await request.json()
 
-    // Use direct Supabase query for the join with organization
-    const { data, error } = await supabase
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: 'Email et mot de passe requis' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Chercher le profil par email
+    const { data: profile, error } = await supabase
       .from('profiles')
-      .select(`
-        *,
-        organizations!profiles_organization_id_fkey(id, name, slug, settings)
-      `)
-      .eq('email', String(email).toLowerCase().trim())
+      .select('id, email, full_name, password_hash, active, organization_id')
+      .eq('email', email.toLowerCase().trim())
+      .single()
+
+    if (error || !profile) {
+      return NextResponse.json(
+        { error: 'Identifiants invalides' },
+        { status: 401 }
+      )
+    }
+
+    if (!profile.active) {
+      return NextResponse.json(
+        { error: 'Compte désactivé' },
+        { status: 403 }
+      )
+    }
+
+    // Vérifier le mot de passe (bcrypt)
+    // Prérequis: npm install bcryptjs @types/bcryptjs
+    const bcrypt = await import('bcryptjs')
+    const valid = await bcrypt.compare(password, profile.password_hash)
+    if (!valid) {
+      return NextResponse.json(
+        { error: 'Identifiants invalides' },
+        { status: 401 }
+      )
+    }
+
+    // Récupérer l'org et le rôle
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('organization_id, role')
+      .eq('user_id', profile.id)
+      .eq('status', 'active')
       .limit(1)
       .single()
 
-    if (error || !data) return apiError('Identifiants invalides', 401)
+    // Créer le payload de session
+    const sessionPayload = {
+      sub: profile.id,
+      email: profile.email,
+      name: profile.full_name,
+      organizationId: membership?.organization_id || profile.organization_id,
+      role: membership?.role || 'member',
+      // Expire dans 24h
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+    }
 
-    const profile = toCamelCase(data) as any
-    if (!profile.active) return apiError('Identifiants invalides', 401)
-    if (!await verifyPassword(password, profile.passwordHash)) return apiError('Identifiants invalides', 401)
+    // Encoder en base64
+    const sessionToken = Buffer.from(
+      JSON.stringify(sessionPayload)
+    ).toString('base64')
 
-    const token = await createSession(profile.id)
-    await setSessionCookie(token)
-    await logAudit(profile.organizationId, 'LOGIN', 'profiles', profile.id, profile.id, profile.email)
+    // Mettre à jour last_login
+    await supabase
+      .from('profiles')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('id', profile.id)
 
-    // Parse org settings so they're available immediately (avoid timing issues)
-    const orgSettings = parseJson(profile.organizations.settings, { setup_completed: true, active_modules: [], applicable_standards: [], industry_type: 'medical_device' })
-
-    return apiSuccess({
-      profile: {
-        id: profile.id, email: profile.email, fullName: profile.fullName, role: profile.role,
-        department: profile.department, jobTitle: profile.jobTitle, organizationId: profile.organizationId,
-      },
-      organization: {
-        id: profile.organizations.id, name: profile.organizations.name, slug: profile.organizations.slug,
-        settings: orgSettings,
-      },
+    // Créer la session DB
+    await supabase.from('sessions').insert({
+      profile_id: profile.id,
+      user_agent: request.headers.get('user-agent') || null,
+      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     })
-  } catch (e: any) {
-    return apiError(e.message || 'Erreur serveur', 500)
+
+    // Réponse avec cookie httpOnly
+    const response = NextResponse.json({
+      success: true,
+      user: {
+        id: profile.id,
+        email: profile.email,
+        full_name: profile.full_name,
+        role: membership?.role || 'member',
+      },
+      organizationId: membership?.organization_id || profile.organization_id,
+    })
+
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24,
+    })
+
+    if (membership?.organization_id) {
+      response.cookies.set('current_org_id', membership.organization_id, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 365,
+      })
+    }
+
+    return response
+  } catch (err) {
+    console.error('Login error:', err)
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    )
   }
 }
