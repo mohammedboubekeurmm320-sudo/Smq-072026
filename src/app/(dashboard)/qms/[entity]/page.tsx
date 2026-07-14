@@ -1,45 +1,27 @@
 'use client'
-// ============================================================
-// Entity List: Page générique pour toutes les entités QMS
-// Route: /qms/[entity]
-// ============================================================
 
 import { useParams, useRouter } from 'next/navigation'
-import { useQmsQuery, useQmsMutation } from '@/hooks/useQmsQuery'
+import { useQmsEntity } from '@/hooks/useQmsQuery'
 import { useAuth } from '@/contexts/AuthContext'
 import { useState } from 'react'
-
-const ENTITY_CONFIG: Record<string, { label: string; refCol: string; statusCol?: string }> = {
-  documents: { label: 'Documents', refCol: 'document_number', statusCol: 'status' },
-  capas: { label: 'CAPA', refCol: 'capa_number', statusCol: 'status' },
-  non_conformances: { label: 'Non-Conformites', refCol: 'ncr_number', statusCol: 'status' },
-  deviations: { label: 'Deviations', refCol: 'dev_number', statusCol: 'status' },
-  change_controls: { label: 'Change Controls', refCol: 'cc_number', statusCol: 'status' },
-  audits: { label: 'Audits', refCol: 'audit_number', statusCol: 'status' },
-  training: { label: 'Formations', refCol: 'title', statusCol: 'status' },
-  risks: { label: 'Risques', refCol: 'risk_number', statusCol: 'status' },
-  suppliers: { label: 'Fournisseurs', refCol: 'name', statusCol: 'status' },
-  batch_records: { label: 'Batch Records', refCol: 'batch_number', statusCol: 'status' },
-  form_templates: { label: 'Modeles de formulaire', refCol: 'title' },
-  form_instances: { label: 'Formulaires', refCol: 'reference_number', statusCol: 'status' },
-}
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Plus, ArrowLeft } from 'lucide-react'
+import { getEntityConfig } from '@/lib/qms-entity-map'
 
 const STATUS_COLORS: Record<string, string> = {
-  Draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  Open: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  'In_Progress': 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-  Under_Review: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
-  Approved: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  Effective: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  Closed: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
-  Rejected: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-  Archived: 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
-  Completed: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  Planned: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
-  Overdue: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-  Under_Evaluation: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
-  Active: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  Inactive: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500',
+  Open: 'bg-red-100 text-red-700', 'Under Investigation': 'bg-amber-100 text-amber-700',
+  Investigation: 'bg-amber-100 text-amber-700', Implementation: 'bg-blue-100 text-blue-700',
+  'In Progress': 'bg-blue-100 text-blue-700', 'Pending Disposition': 'bg-amber-100 text-amber-700',
+  'Pending QA Review': 'bg-amber-100 text-amber-700', 'Effectiveness Check': 'bg-violet-100 text-violet-700',
+  Closed: 'bg-green-100 text-green-700', Completed: 'bg-green-100 text-green-700',
+  Approved: 'bg-green-100 text-green-700', Effective: 'bg-green-100 text-green-700',
+  Released: 'bg-green-100 text-green-700', Qualified: 'bg-green-100 text-green-700',
+  Draft: 'bg-slate-100 text-slate-700', 'Under Review': 'bg-amber-100 text-amber-700',
+  Planned: 'bg-slate-100 text-slate-700', Active: 'bg-blue-100 text-blue-700',
+  Rejected: 'bg-red-100 text-red-700', Obsolete: 'bg-red-100 text-red-700',
 }
 
 export default function EntityListPage() {
@@ -47,161 +29,107 @@ export default function EntityListPage() {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const entity = params.entity as string
-  const config = ENTITY_CONFIG[entity]
-  const [statusFilter, setStatusFilter] = useState('')
+  const entityConfig = getEntityConfig(entity)
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [search, setSearch] = useState('')
 
-  const { data, count, loading, error, setFilters, page, setPage, totalPages } = useQmsQuery({
-    entity,
-    filters: statusFilter ? { status: statusFilter } : undefined,
-    sort: 'created_at',
+  const { items, total, isLoading, remove, isDeleting, refetch } = useQmsEntity(entity, {
+    status: statusFilter !== 'ALL' ? statusFilter : undefined,
+    q: search || undefined,
+    sort: 'createdAt',
     order: 'desc',
     limit: 20,
-    enabled: !!config && isAuthenticated,
   })
 
-  const { execute: deleteRecord, loading: deleting } = useQmsMutation()
-
-  if (!config) return <div className="p-6">Entite non reconnue: {entity}</div>
+  if (!entityConfig) return <div className="p-6">Entité non reconnue : {entity}</div>
 
   const handleDelete = async (id: string) => {
     if (!confirm('Supprimer cet enregistrement ?')) return
-    await deleteRecord(entity, 'DELETE', id)
-    window.location.reload()
+    await remove(id)
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-      </div>
-    )
+  const statusBadge = (status: string) => (
+    <Badge variant="outline" className={`text-xs ${STATUS_COLORS[status] || 'bg-slate-100 text-slate-700'}`}>
+      {status}
+    </Badge>
+  )
+
+  const fmtDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString('fr-FR') } catch { return '-' }
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div>
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-gray-500 hover:text-gray-700 mb-1">
-            ← Tableau de bord
+          <button onClick={() => router.push('/dashboard')} className="text-sm text-muted-foreground hover:text-foreground mb-1 flex items-center gap-1">
+            <ArrowLeft className="h-3 w-3" /> Tableau de bord
           </button>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{config.label}</h1>
-          <p className="text-sm text-gray-500">{count} enregistrement(s)</p>
+          <h1 className="text-2xl font-bold">{entityConfig.labelPlural}</h1>
+          <p className="text-sm text-muted-foreground">{entityConfig.description} · {total} enregistrement(s)</p>
         </div>
-        <button
-          onClick={() => router.push(`/qms/${entity}/new`)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          + Nouveau
-        </button>
+        <Button onClick={() => router.push(`/qms/${entity}/new`)}>
+          <Plus className="h-4 w-4 mr-2" /> Nouveau
+        </Button>
       </div>
 
-      {/* Filtres */}
-      {config.statusCol && (
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <button
-            onClick={() => setStatusFilter('')}
-            className={`px-3 py-1.5 text-xs rounded-full border transition ${
-              !statusFilter ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white' : 'border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-          >
-            Tous
-          </button>
-          {['Draft', 'Open', 'In_Progress', 'Under_Review', 'Approved', 'Closed', 'Archived'].map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 text-xs rounded-full border transition ${
-                statusFilter === s ? 'bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white' : 'border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <input
+              placeholder="Rechercher..."
+              value={search} onChange={e => setSearch(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm border rounded-lg bg-background"
+            />
+            <select
+              value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+              className="px-3 py-2 text-sm border rounded-lg bg-background"
             >
-              {s.replace(/_/g, ' ')}
-            </button>
+              <option value="ALL">Tous les statuts</option>
+              {Object.keys(STATUS_COLORS).map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* List */}
+      {isLoading ? (
+        <div className="space-y-3">{[1,2,3,4].map(i => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}</div>
+      ) : items.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">Aucun enregistrement</CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-3">
+          {items.map((item: any) => (
+            <Card key={item.id} className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => router.push(`/qms/${entity}/${item.id}`)}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      {entityConfig.numberField && item[entityConfig.numberField] && (
+                        <Badge variant="outline" className="font-mono text-xs">{item[entityConfig.numberField]}</Badge>
+                      )}
+                      {entityConfig.statusField && item[entityConfig.statusField] && statusBadge(item[entityConfig.statusField])}
+                    </div>
+                    <h3 className="font-medium truncate">{item.title || item.name || '—'}</h3>
+                    {item.description && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{item.description}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">{fmtDate(item.createdAt)}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); handleDelete(item.id) }} disabled={isDeleting}>
+                    Supprimer
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Tableau */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Reference</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Titre</th>
-              {config.statusCol && (
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Statut</th>
-              )}
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {(!data || data.length === 0) ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
-                  Aucun enregistrement
-                </td>
-              </tr>
-            ) : (
-              data.map((item: any) => (
-                <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
-                    onClick={() => router.push(`/qms/${entity}/${item.id}`)}>
-                  <td className="px-4 py-3 text-sm font-mono font-medium text-gray-900 dark:text-white">
-                    {item[config.refCol]}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
-                    {item.title}
-                  </td>
-                  {config.statusCol && (
-                    <td className="px-4 py-3">
-                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[item[config.statusCol]] || 'bg-gray-100 text-gray-600'}`}>
-                        {(item[config.statusCol] || '').replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {item.created_at ? new Date(item.created_at).toLocaleDateString('fr-FR') : '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDelete(item.id) }}
-                      disabled={deleting}
-                      className="text-red-500 hover:text-red-700 text-xs"
-                    >
-                      {deleting ? '...' : 'Supprimer'}
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-800">
-            <button
-              onClick={() => setPage(Math.max(1, page - 1))}
-              disabled={page <= 1}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-lg disabled:opacity-50"
-            >
-              Precedent
-            </button>
-            <span className="text-sm text-gray-500">Page {page} / {totalPages}</span>
-            <button
-              onClick={() => setPage(Math.min(totalPages, page + 1))}
-              disabled={page >= totalPages}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 rounded-lg disabled:opacity-50"
-            >
-              Suivant
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
