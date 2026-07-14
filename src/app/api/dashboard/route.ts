@@ -12,11 +12,15 @@ export async function GET(request: NextRequest) {
   if (view === 'deadlines') {
     const days = parseInt(searchParams.get('days') || '7')
     const result = await getDeadlines(request, days)
-    if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
-    return NextResponse.json(result.data)
+    if (result.error) {
+      return NextResponse.json({ success: false, error: result.error }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, data: result.data })
   }
 
   const result = await getDashboardKPIs(request)
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
-  return NextResponse.json(result.data)
+  if (result.error) {
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 })
+  }
+  return NextResponse.json({ success: true, data: result.data })
 }

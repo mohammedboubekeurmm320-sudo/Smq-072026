@@ -1,14 +1,14 @@
-import { db } from '@/lib/db'
-import { supabase } from '@/lib/supabase'
-import { toCamelCase } from '@/lib/db'
-import bcrypt from 'bcryptjs'
-import { cookies } from 'next/headers'
-import { randomUUID } from 'crypto'
-import type { UserRole, Permission, OrgSettings } from '@/types/qms'
-import { rolePermissions, INDUSTRY_CONFIG, STANDARDS_BY_INDUSTRY, CORE_MODULES } from '@/types/qms'
+// ============================================================
+// Auth server helpers: password hashing + session parsing
+// Compatible avec le nouveau système de cookie base64 JSON
+// ============================================================
 
-const SESSION_COOKIE = 'qms_session'
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
+import { cookies } from 'next/headers'
+import bcrypt from 'bcryptjs'
+import type { UserRole, Permission } from '@/types/qms'
+import { rolePermissions } from '@/types/qms'
+
+// ---- Password helpers (utilisés par signup, profiles) ----
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10)
@@ -18,115 +18,62 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   try { return bcrypt.compare(password, hash) } catch { return false }
 }
 
-export async function createSession(profileId: string): Promise<string> {
-  const token = randomUUID()
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS)
-  await db.session.create({ data: { token, profileId, expiresAt } })
-  await db.profile.update({ where: { id: profileId }, data: { lastLoginAt: new Date() } })
-  return token
-}
+// ---- Session parsing (lit le cookie "session" base64 JSON) ----
 
-export async function setSessionCookie(token: string) {
-  const expires = new Date(Date.now() + SESSION_DURATION_MS)
-  const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true, secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax', expires, path: '/',
-  })
-}
+const SESSION_COOKIE = 'session'
 
-export async function clearSessionCookie() {
-  const cookieStore = await cookies()
-  cookieStore.delete(SESSION_COOKIE)
-}
-
-export async function destroySession(token: string) {
-  try { await db.session.deleteMany({ where: { token } }) } catch {}
+interface SessionPayload {
+  sub: string
+  email: string
+  name: string
+  organizationId: string
+  role: string
+  exp: number
 }
 
 export interface ServerSession {
   profile: {
-    id: string; email: string; fullName: string; role: UserRole
-    department: string | null; jobTitle: string | null
+    id: string
+    email: string
+    fullName: string
+    role: UserRole
     organizationId: string
-  }
-  organization: {
-    id: string; name: string; slug: string
-    settings: OrgSettings
   }
 }
 
 export async function getServerSession(): Promise<ServerSession | null> {
   try {
     const cookieStore = await cookies()
-    const token = cookieStore.get(SESSION_COOKIE)?.value
-    if (!token) return null
+    const raw = cookieStore.get(SESSION_COOKIE)?.value
+    if (!raw) return null
 
-    // Direct Supabase query for nested join: session → profile → organization
-    const { data, error } = await supabase
-      .from('sessions')
-      .select(`
-        id, token, expires_at, profile_id,
-        profiles!sessions_profile_id_fkey(
-          id, email, full_name, role, department, job_title, organization_id, active,
-          organizations!profiles_organization_id_fkey(id, name, slug, settings)
-        )
-      `)
-      .eq('token', token)
-      .limit(1)
-      .single()
+    const payload: SessionPayload = JSON.parse(
+      Buffer.from(raw, 'base64').toString()
+    )
 
-    if (error || !data) return null
-
-    const sessionRow = toCamelCase(data) as any
-    if (new Date(sessionRow.expiresAt) < new Date()) {
-      await db.session.delete({ where: { id: sessionRow.id } })
-      return null
-    }
-
-    const p = sessionRow.profiles
-    if (!p || !p.active) return null
+    // Vérifier l'expiration
+    if (payload.exp && Date.now() > payload.exp) return null
 
     return {
       profile: {
-        id: p.id, email: p.email, fullName: p.fullName, role: p.role as UserRole,
-        department: p.department, jobTitle: p.jobTitle, organizationId: p.organizationId,
+        id: payload.sub,
+        email: payload.email,
+        fullName: payload.name,
+        role: (payload.role || 'member') as UserRole,
+        organizationId: payload.organizationId,
       },
-      organization: {
-        id: p.organizations.id, name: p.organizations.name, slug: p.organizations.slug,
-        settings: parseSettings(p.organizations.settings),
-      }
     }
-  } catch (e) {
-    console.error('[auth] getServerSession error:', e)
+  } catch {
     return null
   }
 }
 
-function parseSettings(s: string): OrgSettings {
-  try {
-    const parsed = JSON.parse(s || '{}')
-    return {
-      setup_completed: parsed.setup_completed ?? false,
-      industry_type: parsed.industry_type ?? 'medical_device',
-      applicable_standards: parsed.applicable_standards ?? [],
-      active_modules: parsed.active_modules ?? [...CORE_MODULES],
-      company_name: parsed.company_name,
-      country: parsed.country,
-      city: parsed.city,
-      org_size: parsed.org_size,
-      notifications: parsed.notifications,
-    }
-  } catch {
-    return { setup_completed: false, active_modules: [...CORE_MODULES] as any, applicable_standards: [], industry_type: 'medical_device' }
-  }
-}
+// ---- Permission helpers ----
 
 export function hasPermission(role: UserRole, perm: Permission): boolean {
   return (rolePermissions[role] || []).includes(perm)
 }
 
-// Helper to enforce auth + return session or throw
 export async function requireAuth(): Promise<ServerSession> {
   const s = await getServerSession()
   if (!s) throw new Error('Non authentifié')

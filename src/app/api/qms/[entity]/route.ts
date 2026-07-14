@@ -1,10 +1,10 @@
 // ============================================================
-// Route API CRUD dynamique: /api/qms/[entity] et /api/qms/[entity]/[id]
+// Route API CRUD dynamique: /api/qms/[entity]
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  getAll, getById, create, update, softDelete, remove,
+  getAll, create,
   type CrudEntity,
 } from '@/lib/crud-service'
 
@@ -18,26 +18,25 @@ const ALLOWED: CrudEntity[] = [
   'scheduled_reports', 'notifications',
 ]
 
+// Helper: réponse standardisée { success, data }
+function ok(data: any, status = 200) {
+  return NextResponse.json({ success: true, data }, { status })
+}
+function err(message: string, status = 400) {
+  return NextResponse.json({ success: false, error: message }, { status })
+}
+
 // GET /api/qms/[entity] → liste
-// GET /api/qms/[entity]/[id] → détail
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ entity: string; id?: string[] }> }
+  { params }: { params: Promise<{ entity: string }> }
 ) {
-  const { entity, id } = await params
+  const { entity } = await params
 
   if (!ALLOWED.includes(entity as CrudEntity)) {
-    return NextResponse.json({ error: 'Entity not allowed' }, { status: 400 })
+    return err('Entity not allowed')
   }
 
-  // Détail par ID
-  if (id?.[0]) {
-    const result = await getById(request, entity as CrudEntity, id[0])
-    if (result.error) return NextResponse.json({ error: result.error }, { status: 404 })
-    return NextResponse.json(result.data)
-  }
-
-  // Liste avec filtres
   const { searchParams } = new URL(request.url)
   const filters: Record<string, string> = {}
   const skip = ['sort', 'order', 'limit', 'offset', 'select']
@@ -56,8 +55,8 @@ export async function GET(
     offset: parseInt(searchParams.get('offset') || '0'),
   })
 
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
-  return NextResponse.json({ data: result.data, count: result.count })
+  if (result.error) return err(result.error, 500)
+  return ok({ items: result.data, count: result.count })
 }
 
 // POST /api/qms/[entity] → créer
@@ -68,56 +67,15 @@ export async function POST(
   const { entity } = await params
 
   if (!ALLOWED.includes(entity as CrudEntity)) {
-    return NextResponse.json({ error: 'Entity not allowed' }, { status: 400 })
+    return err('Entity not allowed')
   }
 
   const body = await request.json()
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Body requis' }, { status: 400 })
+    return err('Body requis')
   }
 
   const result = await create(request, entity as CrudEntity, body)
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 400 })
-  return NextResponse.json(result.data, { status: 201 })
-}
-
-// PUT /api/qms/[entity]/[id] → modifier
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ entity: string; id: string[] }> }
-) {
-  const { entity, id } = await params
-
-  if (!id?.[0] || !ALLOWED.includes(entity as CrudEntity)) {
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
-  }
-
-  const body = await request.json()
-  const result = await update(request, entity as CrudEntity, id[0], body)
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 400 })
-  return NextResponse.json(result.data)
-}
-
-// DELETE /api/qms/[entity]/[id] → soft delete (hard=true pour définitif)
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ entity: string; id: string[] }> }
-) {
-  const { entity, id } = await params
-
-  if (!id?.[0] || !ALLOWED.includes(entity as CrudEntity)) {
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
-  }
-
-  const { searchParams } = new URL(request.url)
-
-  if (searchParams.get('hard') === 'true') {
-    const result = await remove(request, entity as CrudEntity, id[0])
-    if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
-    return NextResponse.json({ success: true })
-  }
-
-  const result = await softDelete(request, entity as CrudEntity, id[0])
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
-  return NextResponse.json(result.data)
+  if (result.error) return err(result.error, 400)
+  return ok(result.data, 201)
 }

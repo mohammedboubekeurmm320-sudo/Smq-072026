@@ -1,17 +1,36 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { hashPassword, createSession, setSessionCookie } from '@/lib/auth-server'
-import { apiSuccess, apiError, logAudit } from '@/lib/api-helpers'
-import { INDUSTRY_CONFIG, STANDARDS_BY_INDUSTRY, CORE_MODULES, type IndustryType } from '@/types/qms'
+// ============================================================
+// SIGNUP API: Créer un compte organisation + profil admin
+// ============================================================
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { hashPassword } from '@/lib/auth-server'
+import { INDUSTRY_CONFIG, STANDARDS_BY_INDUSTRY, type IndustryType } from '@/types/qms'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(req: NextRequest) {
   try {
     const { email, password, fullName, orgName, industry } = await req.json()
-    if (!email || !password || !fullName || !orgName) return apiError('Champs obligatoires manquants', 400)
+    if (!email || !password || !fullName || !orgName) {
+      return NextResponse.json({ success: false, error: 'Champs obligatoires manquants' }, { status: 400 })
+    }
 
-    const existing = await db.profile.findUnique({ where: { email: String(email).toLowerCase().trim() } })
-    if (existing) return apiError('Cet email est déjà utilisé', 409)
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
+    // Vérifier email unique
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase().trim())
+      .single()
+
+    if (existing) {
+      return NextResponse.json({ success: false, error: 'Cet email est déjà utilisé' }, { status: 409 })
+    }
+
+    // Créer l'organisation
     const slug = orgName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     const ind = (industry || 'medical_device') as IndustryType
     const indConfig = INDUSTRY_CONFIG[ind] || INDUSTRY_CONFIG.medical_device
@@ -24,42 +43,92 @@ export async function POST(req: NextRequest) {
       notifications: { capa_overdue: true, ncr_overdue: true, document_expiry: true, training_overdue: true, audit_due: true },
     }
 
-    const org = await db.organization.create({
-      data: { name: orgName, slug, settings: JSON.stringify(settings) },
+    const { data: org, error: orgError } = await supabase
+      .from('organizations')
+      .insert({ name: orgName, slug, settings: JSON.stringify(settings) })
+      .select()
+      .single()
+
+    if (orgError) {
+      return NextResponse.json({ success: false, error: orgError.message }, { status: 500 })
+    }
+
+    // Créer le profil admin
+    const passwordHash = await hashPassword(password)
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        email: email.toLowerCase().trim(),
+        full_name: fullName,
+        role: 'admin',
+        password_hash: passwordHash,
+        organization_id: org.id,
+        active: true,
+      })
+      .select('id, email, full_name, role, organization_id')
+      .single()
+
+    if (profileError) {
+      // Rollback: supprimer l'org
+      await supabase.from('organizations').delete().eq('id', org.id)
+      return NextResponse.json({ success: false, error: profileError.message }, { status: 500 })
+    }
+
+    // Ajouter le membership
+    await supabase.from('organization_members').insert({
+      organization_id: org.id,
+      user_id: profile.id,
+      role: 'owner',
+      status: 'active',
     })
-    const profile = await db.profile.create({
+
+    // Créer le cookie de session
+    const sessionPayload = {
+      sub: profile.id,
+      email: profile.email,
+      name: profile.full_name,
+      organizationId: org.id,
+      role: 'admin',
+      exp: Date.now() + 24 * 60 * 60 * 1000,
+    }
+    const sessionToken = Buffer.from(JSON.stringify(sessionPayload)).toString('base64')
+
+    // Seed system record types
+    await seedSystemRecordTypes(supabase, org.id, profile.id)
+
+    const response = NextResponse.json({
+      success: true,
       data: {
-        email: String(email).toLowerCase().trim(),
-        fullName, role: 'admin',
-        passwordHash: await hashPassword(password),
-        organizationId: org.id,
+        profile: {
+          id: profile.id, email: profile.email, full_name: profile.full_name,
+          role: profile.role, organization_id: profile.organization_id,
+        },
+        organization: { id: org.id, name: org.name, slug: org.slug },
       },
+    }, { status: 201 })
+
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24,
     })
-    await db.organizationMember.create({
-      data: { organizationId: org.id, profileId: profile.id, role: 'owner', status: 'active' },
+    response.cookies.set('current_org_id', org.id, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
     })
 
-    // Seed system record types for this org
-    await seedSystemRecordTypes(org.id, profile.id)
-
-    const token = await createSession(profile.id)
-    await setSessionCookie(token)
-    await logAudit(org.id, 'CREATE', 'organizations', org.id, profile.id, profile.email, undefined, { name: orgName })
-    await logAudit(org.id, 'CREATE', 'profiles', profile.id, profile.id, profile.email)
-
-    return apiSuccess({
-      profile: {
-        id: profile.id, email: profile.email, fullName: profile.fullName, role: profile.role,
-        organizationId: profile.organizationId,
-      },
-      organization: { id: org.id, name: org.name, slug: org.slug, settings: settings },
-    }, 201)
+    return response
   } catch (e: any) {
-    return apiError(e.message || 'Erreur serveur', 500)
+    return NextResponse.json({ success: false, error: e.message || 'Erreur serveur' }, { status: 500 })
   }
 }
 
-async function seedSystemRecordTypes(orgId: string, profileId: string) {
+async function seedSystemRecordTypes(supabase: any, orgId: string, profileId: string) {
   const slugs = ['capa', 'ncr', 'deviation', 'change_control', 'audit', 'risk', 'training', 'supplier', 'batch_record', 'oos_oot']
   const names: Record<string, string> = {
     capa: 'CAPA', ncr: 'Non-Conformité', deviation: 'Déviation', change_control: 'Contrôle des Changements',
@@ -92,17 +161,15 @@ async function seedSystemRecordTypes(orgId: string, profileId: string) {
   }
   const eSig: Record<string, boolean> = { capa: true, ncr: true, deviation: true, change_control: true, audit: true, risk: true, training: true, supplier: true, batch_record: true, oos_oot: true }
 
-  for (const slug of slugs) {
-    await db.recordTypeDefinition.create({
-      data: {
-        slug, name: names[slug], nameEn: slug, icon: 'FileText',
-        description: `${names[slug]} (système)`,
-        statusFlowJson: JSON.stringify(flows[slug]),
-        defaultFieldsJson: '[]',
-        complianceRefsJson: JSON.stringify(compliance[slug] || []),
-        isSystem: true, isActive: true, requiresEsig: eSig[slug], minApproverCount: 1,
-        version: 1, organizationId: orgId, createdById: profileId,
-      },
-    })
-  }
+  const rows = slugs.map(slug => ({
+    slug, name: names[slug], name_en: slug, icon: 'FileText',
+    description: `${names[slug]} (système)`,
+    status_flow_json: JSON.stringify(flows[slug]),
+    default_fields_json: '[]',
+    compliance_refs_json: JSON.stringify(compliance[slug] || []),
+    is_system: true, is_active: true, requires_esig: eSig[slug], min_approver_count: 1,
+    version: 1, organization_id: orgId, created_by: profileId,
+  }))
+
+  await supabase.from('record_type_definitions').insert(rows)
 }

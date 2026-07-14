@@ -1,51 +1,95 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { getServerSession, hasPermission, hashPassword } from '@/lib/auth-server'
-import { apiSuccess, apiError, logAudit } from '@/lib/api-helpers'
+// ============================================================
+// Route API Profiles: /api/profiles/[id] (update, delete)
+// ============================================================
+
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
+import { getServerSession, hashPassword } from '@/lib/auth-server'
 
 interface Ctx { params: Promise<{ id: string }> }
 
 export async function PUT(req: NextRequest, { params }: Ctx) {
   try {
     const session = await getServerSession()
-    if (!session || !hasPermission(session.profile.role, 'admin.users' as any)) return apiError('Permissions insuffisantes', 403)
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Non authentifié' }, { status: 401 })
+    }
     const { id } = await params
     const body = await req.json()
-    const existing = await db.profile.findFirst({ where: { id, organizationId: session.profile.organizationId } })
-    if (!existing) return apiError('Utilisateur introuvable', 404)
 
-    if (body.active === false && id === session.profile.id) return apiError('Vous ne pouvez pas désactiver votre propre compte', 400)
-    if (body.role && body.role !== 'admin' && id === session.profile.id && existing.role === 'admin') return apiError('Vous ne pouvez pas rétrograder votre propre compte admin', 400)
-
-    const data: any = {}
-    if (body.fullName !== undefined) data.fullName = body.fullName
-    if (body.email !== undefined) {
-      const dup = await db.profile.findUnique({ where: { email: String(body.email).toLowerCase().trim() } })
-      if (dup && dup.id !== id) return apiError('Email déjà utilisé', 409)
-      data.email = String(body.email).toLowerCase().trim()
+    const fakeReq = { headers: new Headers() } as any
+    const { client } = await getAuthenticatedClient(fakeReq)
+    if (!client) {
+      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
     }
-    if (body.role !== undefined && ['admin', 'quality_manager', 'auditor', 'document_controller', 'executive', 'operator'].includes(body.role)) data.role = body.role
-    if (body.department !== undefined) data.department = body.department
-    if (body.jobTitle !== undefined) data.jobTitle = body.jobTitle
-    if (body.active !== undefined) data.active = body.active
-    if (body.password) data.passwordHash = await hashPassword(body.password)
 
-    const updated = await db.profile.update({ where: { id }, data, select: { id: true, email: true, fullName: true, role: true, department: true, jobTitle: true, active: true } })
-    await logAudit(session.profile.organizationId, 'UPDATE', 'profiles', id, session.profile.id, session.profile.email, existing, updated)
-    return apiSuccess({ profile: updated })
-  } catch (e: any) { return apiError(e.message, 500) }
+    const { data: existing } = await client
+      .from('profiles')
+      .select('id, organization_id')
+      .eq('id', id)
+      .eq('organization_id', session.profile.organizationId)
+      .single()
+
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Utilisateur introuvable' }, { status: 404 })
+    }
+
+    const updateData: Record<string, any> = {}
+    if (body.full_name !== undefined) updateData.full_name = body.full_name
+    if (body.email !== undefined) updateData.email = body.email.toLowerCase().trim()
+    if (body.role !== undefined) updateData.role = body.role
+    if (body.department !== undefined) updateData.department = body.department
+    if (body.job_title !== undefined) updateData.job_title = body.job_title
+    if (body.active !== undefined) updateData.active = body.active
+    if (body.password) updateData.password_hash = await hashPassword(body.password)
+
+    const { data, error } = await client
+      .from('profiles')
+      .update(updateData)
+      .eq('id', id)
+      .select('id, email, full_name, role, department, job_title, active')
+      .single()
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true, data: { profile: data } })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
   try {
     const session = await getServerSession()
-    if (!session || !hasPermission(session.profile.role, 'admin.users' as any)) return apiError('Permissions insuffisantes', 403)
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Non authentifié' }, { status: 401 })
+    }
     const { id } = await params
-    if (id === session.profile.id) return apiError('Vous ne pouvez pas supprimer votre propre compte', 400)
-    const existing = await db.profile.findFirst({ where: { id, organizationId: session.profile.organizationId } })
-    if (!existing) return apiError('Utilisateur introuvable', 404)
-    await db.profile.delete({ where: { id } })
-    await logAudit(session.profile.organizationId, 'DELETE', 'profiles', id, session.profile.id, session.profile.email, existing)
-    return apiSuccess({ ok: true })
-  } catch (e: any) { return apiError(e.message, 500) }
+
+    if (id === session.profile.id) {
+      return NextResponse.json({ success: false, error: 'Vous ne pouvez pas supprimer votre propre compte' }, { status: 400 })
+    }
+
+    const fakeReq = { headers: new Headers() } as any
+    const { client } = await getAuthenticatedClient(fakeReq)
+    if (!client) {
+      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
+    }
+
+    const { error } = await client
+      .from('profiles')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', session.profile.organizationId)
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, data: { deleted: true } })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+  }
 }

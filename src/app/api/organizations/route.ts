@@ -1,88 +1,95 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { supabase } from '@/lib/supabase'
-import { toCamelCase } from '@/lib/db'
+// ============================================================
+// Route API Organizations: /api/organizations
+// ============================================================
+
+import { NextRequest, NextResponse } from 'next/server'
+import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { getServerSession } from '@/lib/auth-server'
-import { apiSuccess, apiError } from '@/lib/api-helpers'
 
 export async function GET() {
   try {
     const session = await getServerSession()
-    if (!session) return apiError('Non authentifié', 401)
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Non authentifié' }, { status: 401 })
+    }
+
+    const { client } = await getAuthenticatedClient({ headers: new Headers() } as any)
+    if (!client) {
+      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
+    }
+
     const orgId = session.profile.organizationId
 
-    // Fetch the organization record
-    const { data: orgData, error: orgError } = await supabase
+    const { data: orgData, error } = await client
       .from('organizations')
       .select('*')
       .eq('id', orgId)
       .single()
 
-    if (orgError || !orgData) return apiError('Organisation introuvable', 404)
+    if (error || !orgData) {
+      return NextResponse.json({ success: false, error: 'Organisation introuvable' }, { status: 404 })
+    }
 
-    // Count queries for each related table (replaces Prisma _count)
+    // Counts
     const countTables = [
       'profiles', 'documents', 'capas', 'non_conformances',
       'deviations', 'change_controls', 'audits', 'risks',
-      'training', 'batch_records', 'record_links',
+      'training', 'batch_records',
     ]
 
-    const countPromises = countTables.map(table =>
-      supabase.from(table).select('id', { count: 'exact', head: true }).eq('organization_id', orgId)
+    const countResults = await Promise.all(
+      countTables.map(table =>
+        client.from(table).select('id', { count: 'exact', head: true }).eq('organization_id', orgId)
+      )
     )
 
-    const countResults = await Promise.all(countPromises)
-
-    const countMap: Record<string, number> = {}
-    const tableToModel: Record<string, string> = {
-      profiles: 'profiles',
-      documents: 'documents',
-      capas: 'capas',
-      non_conformances: 'nonConformances',
-      deviations: 'deviations',
-      change_controls: 'changeControls',
-      audits: 'audits',
-      risks: 'risks',
-      training: 'trainings',
-      batch_records: 'batchRecords',
-      record_links: 'recordLinks',
-    }
-
+    const _count: Record<string, number> = {}
     countTables.forEach((table, i) => {
-      countMap[tableToModel[table]] = countResults[i].count ?? 0
+      _count[table] = countResults[i].count ?? 0
     })
 
-    const org = {
-      ...toCamelCase(orgData),
-      _count: countMap,
-    }
-
-    return apiSuccess({ organization: org })
+    return NextResponse.json({
+      success: true,
+      data: { organization: { ...orgData, _count } },
+    })
   } catch (e: any) {
-    return apiError(e.message, 500)
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
   }
 }
 
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession()
-    if (!session) return apiError('Non authentifié', 401)
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Non authentifié' }, { status: 401 })
+    }
+
     const body = await req.json()
-    const { name, settings, ...rest } = body
+    const { name, settings } = body
+    const orgId = session.profile.organizationId
 
-    const existing = await db.organization.findUnique({ where: { id: session.profile.organizationId } })
-    if (!existing) return apiError('Organisation introuvable', 404)
+    const { client } = await getAuthenticatedClient({ headers: new Headers() } as any)
+    if (!client) {
+      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
+    }
 
-    const updated = await db.organization.update({
-      where: { id: session.profile.organizationId },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(settings !== undefined && { settings: typeof settings === 'string' ? settings : JSON.stringify(settings) }),
-        ...rest,
-      },
-    })
-    return apiSuccess({ organization: updated })
+    const updateData: Record<string, any> = {}
+    if (name !== undefined) updateData.name = name
+    if (settings !== undefined) updateData.settings = typeof settings === 'string' ? settings : JSON.stringify(settings)
+
+    const { data, error } = await client
+      .from('organizations')
+      .update(updateData)
+      .eq('id', orgId)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ success: true, data: { organization: data } })
   } catch (e: any) {
-    return apiError(e.message, 500)
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
   }
 }

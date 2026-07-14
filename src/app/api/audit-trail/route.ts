@@ -1,5 +1,5 @@
 // ============================================================
-// Route API Audit: /api/audit (lecture seule)
+// Route API Audit Trail: /api/audit-trail
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
     limit: parseInt(searchParams.get('limit') || '50'),
   })
 
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
-  return NextResponse.json(result.data)
+  if (result.error) {
+    return NextResponse.json({ success: false, error: result.error }, { status: 500 })
+  }
+  return NextResponse.json({ success: true, data: result.data })
 }
