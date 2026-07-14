@@ -39,6 +39,7 @@ export async function middleware(request: NextRequest) {
         Buffer.from(sessionCookie.value, 'base64').toString()
       )
       profileId = payload.profileId || payload.sub || null
+      const userRole = payload.role || 'member'
 
       // Vérifier l'expiration
       if (payload.exp && Date.now() > payload.exp) {
@@ -59,9 +60,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Injecter le profile_id dans les headers pour les API routes
+  // Injecter le profile_id et le rôle dans les headers pour les API routes
+  let userRole = 'member'
+  try {
+    const payload = JSON.parse(
+      Buffer.from(sessionCookie!.value, 'base64').toString()
+    )
+    userRole = payload.role || 'member'
+  } catch { /* use default */ }
+
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-profile-id', profileId)
+  requestHeaders.set('x-user-role', userRole)
 
   // Injecter aussi l'org_id si disponible
   const orgCookie = request.cookies.get('current_org_id')

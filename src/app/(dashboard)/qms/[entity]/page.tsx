@@ -6,38 +6,12 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getEntityConfig } from '@/lib/qms-entity-map'
-
-const STATUS_COLORS: Record<string, string> = {
-  Open: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
-  'Under Investigation': 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  Investigation: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  Implementation: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  'In Progress': 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  'Pending Disposition': 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  'Pending QA Review': 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  'Effectiveness Check': 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400',
-  Closed: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  Completed: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  Approved: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  Effective: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  Released: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  Qualified: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-  Draft: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  'Under Review': 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  Planned: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  Active: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  Rejected: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
-  Obsolete: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
-  Archived: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-  Requested: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-  'In Implementation': 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-  Mitigated: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  Conditional: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-  'Under Evaluation': 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-}
+import { getStatusColor, STATUS_COLORS } from '@/lib/status-colors'
 
 export default function EntityListPage() {
   const params = useParams()
@@ -69,7 +43,7 @@ export default function EntityListPage() {
   }
 
   const statusBadge = (status: string) => (
-    <Badge variant="outline" className={`text-xs ${STATUS_COLORS[status] || 'bg-slate-100 text-slate-700'}`}>
+    <Badge variant="outline" className={`text-xs ${getStatusColor(status)}`}>
       {status}
     </Badge>
   )
@@ -98,20 +72,22 @@ export default function EntityListPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <input
+            <Input
               placeholder="Rechercher par titre..."
               value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
-              className="flex-1 px-3 py-2 text-sm border rounded-lg bg-background"
+              className="flex-1"
             />
-            <select
-              value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-              className="px-3 py-2 text-sm border rounded-lg bg-background"
-            >
-              <option value="ALL">Tous les statuts</option>
-              {Object.keys(STATUS_COLORS).map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1) }}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Tous les statuts" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Tous les statuts</SelectItem>
+                {Object.keys(STATUS_COLORS).map(s => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -147,7 +123,7 @@ export default function EntityListPage() {
                       {item.description && <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{item.description}</p>}
                       <p className="text-xs text-muted-foreground mt-1">{fmtDate(item.created_at || item.createdAt)}</p>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 shrink-0"
                       onClick={e => { e.stopPropagation(); handleDelete(item.id) }} disabled={isDeleting}>
                       Supprimer
                     </Button>

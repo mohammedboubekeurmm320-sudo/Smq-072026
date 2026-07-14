@@ -6,20 +6,20 @@ import { useAuth } from '@/contexts/AuthContext'
 import { OrgSwitcher } from '@/components/qms/OrgSwitcher'
 import { NotificationBell } from '@/components/qms/NotificationBell'
 import { UserMenu } from '@/components/qms/UserMenu'
+import { GlobalSearch } from '@/components/shared/GlobalSearch'
 import { SIDEBAR_NAV, type NavGroup } from '@/lib/qms-entity-map'
 import { cn } from '@/lib/utils'
-import { Menu, X, ShieldCheck, Search, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { Menu, ShieldCheck, PanelLeftClose, PanelLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
-// Lazy-loaded Lucide icons map
 import {
   LayoutDashboard, Shield, AlertTriangle, AlertOctagon, ArrowLeftRight,
   ClipboardCheck, FileText, GraduationCap, Package, Truck, BarChart3,
-  History, Bell, SearchIcon,
+  History, Bell, Search as SearchIcon,
 } from 'lucide-react'
 
 const ICON_MAP: Record<string, any> = {
@@ -34,6 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, isAuthenticated, loading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -46,6 +47,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
+
+  // Ctrl+K / Cmd+K shortcut
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault()
+      setSearchOpen(prev => !prev)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   if (loading) {
     return (
@@ -169,17 +183,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Menu className="h-5 w-5" />
             </Button>
 
-            {/* Global search */}
+            {/* Global search trigger */}
             <div className="relative hidden sm:block">
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Rechercher... (Ctrl+K)"
-                className="w-64 pl-9 h-9 text-sm"
+                className="w-64 pl-9 h-9 text-sm cursor-pointer"
                 readOnly
-                onClick={() => {/* Future: open global search cmdk */}}
+                onClick={() => setSearchOpen(true)}
               />
               <kbd className="absolute right-2 top-2 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
-                ⌘K
+                Ctrl+K
               </kbd>
             </div>
           </div>
@@ -196,6 +210,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+
+      {/* Global Search Dialog */}
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   )
 }
