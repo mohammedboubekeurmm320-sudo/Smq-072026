@@ -1,142 +1,154 @@
 'use client'
-// ============================================================
-// useQmsQuery: Hook générique pour requêter les entités QMS
-// Utilise TanStack Query (ou fetch natif en fallback)
-// ============================================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api-client'
+import { getEntityConfig } from '@/lib/qms-entity-map'
 
-interface UseQmsQueryOptions {
-  entity: string
-  id?: string
-  filters?: Record<string, string>
+// ── Types ──────────────────────────────────────────────────────────────────
+interface PaginatedResponse<T> {
+  success: boolean
+  data: T[]
+  total: number
+  page: number
+  limit: number
+}
+
+interface SingleResponse<T> {
+  success: boolean
+  data: T
+}
+
+interface QueryParams {
+  page?: number
+  limit?: number
   sort?: string
   order?: 'asc' | 'desc'
-  limit?: number
-  offset?: number
-  select?: string
-  enabled?: boolean
+  status?: string
+  q?: string
+  [key: string]: any
 }
 
-interface UseQmsQueryResult<T = any> {
-  data: T[] | null
-  record: T | null
-  count: number
-  loading: boolean
-  error: string | null
-  refetch: () => void
-  setFilters: (filters: Record<string, string>) => void
-  setPage: (page: number) => void
-  page: number
-  totalPages: number
-}
+// ── Generic Entity CRUD Hook ───────────────────────────────────────────────
+export function useQmsEntity<T = any>(entitySlug: string, params: QueryParams = {}) {
+  const queryClient = useQueryClient()
+  const config = getEntityConfig(entitySlug)
+  const basePath = `/api/qms/${entitySlug}`
 
-export function useQmsQuery<T = any>(options: UseQmsQueryOptions): UseQmsQueryResult<T> {
-  const {
-    entity, id, filters: initialFilters = {}, sort, order, limit = 20, offset: initialOffset = 0,
-    select, enabled = true,
-  } = options
-
-  const [data, setData] = useState<T[] | null>(null)
-  const [record, setRecord] = useState<T | null>(null)
-  const [count, setCount] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [filters, setFiltersState] = useState(initialFilters)
-  const [offset, setOffset] = useState(initialOffset)
-  const [page, setPage] = useState(1)
-
-  const fetcher = useCallback(async () => {
-    if (!enabled) return
-    setLoading(true)
-    setError(null)
-    try {
-      const params = new URLSearchParams()
-      if (sort) params.set('sort', sort)
-      if (order) params.set('order', order)
-      params.set('limit', String(limit))
-      params.set('offset', String(offset))
-      if (select) params.set('select', select)
-      Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
-
-      const url = id
-        ? `/api/qms/${entity}/${id}`
-        : `/api/qms/${entity}?${params.toString()}`
-
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(await res.text())
-      const json = await res.json()
-
-      if (id) {
-        setRecord(json)
-      } else {
-        setData(json.data || json)
-        setCount(json.count || 0)
-      }
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+  // Build query string
+  const qs = new URLSearchParams()
+  if (params.page) qs.set('page', String(params.page))
+  if (params.limit) qs.set('limit', String(params.limit))
+  if (params.sort) qs.set('sort', params.sort)
+  if (params.order) qs.set('order', params.order)
+  if (params.status) qs.set('status', params.status)
+  if (params.q) qs.set('q', params.q)
+  Object.entries(params).forEach(([k, v]) => {
+    if (!['page', 'limit', 'sort', 'order', 'status', 'q'].includes(k) && v !== undefined && v !== '') {
+      qs.set(k, String(v))
     }
-  }, [entity, id, JSON.stringify(filters), sort, order, limit, offset, enabled])
+  })
+  const queryString = qs.toString()
+  const url = queryString ? `${basePath}?${queryString}` : basePath
 
-  useEffect(() => { fetcher() }, [fetcher])
+  // LIST query
+  const listQuery = useQuery({
+    queryKey: ['qms', entitySlug, params],
+    queryFn: () => apiGet<PaginatedResponse<T>>(url),
+    select: (res) => ({ items: res.data, total: res.total, page: res.page, limit: res.limit }),
+  })
 
-  const setFilters = useCallback((newFilters: Record<string, string>) => {
-    setFiltersState(newFilters)
-    setOffset(0)
-    setPage(1)
-  }, [])
+  // GET by ID
+  const getById = (id: string) =>
+    apiGet<SingleResponse<T>>(`${basePath}/${id}`).then(r => r.data)
 
-  const setPageHandler = useCallback((p: number) => {
-    setPage(p)
-    setOffset((p - 1) * limit)
-  }, [limit])
+  // CREATE mutation
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<T>) => apiPost<SingleResponse<T>>(basePath, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['qms', entitySlug] })
+    },
+  })
+
+  // UPDATE mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<T> }) =>
+      apiPut<SingleResponse<T>>(`${basePath}/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['qms', entitySlug] })
+    },
+  })
+
+  // DELETE mutation (soft delete via API)
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`${basePath}/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['qms', entitySlug] })
+    },
+  })
 
   return {
-    data, record, count, loading, error, refetch: fetcher,
-    setFilters, setPage: setPageHandler, page,
-    totalPages: Math.ceil(count / limit),
+    config,
+    // List
+    items: listQuery.data?.items ?? [],
+    total: listQuery.data?.total ?? 0,
+    page: listQuery.data?.page ?? 1,
+    isLoading: listQuery.isLoading,
+    isError: listQuery.isError,
+    error: listQuery.error,
+    refetch: listQuery.refetch,
+    // CRUD
+    getById,
+    create: createMutation.mutateAsync,
+    update: updateMutation.mutateAsync,
+    remove: deleteMutation.mutateAsync,
+    // Mutation states
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
   }
 }
 
-// Hook pour les mutations (POST / PUT / DELETE)
-export function useQmsMutation<T = any>() {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const execute = async (
-    entity: string,
-    method: 'POST' | 'PUT' | 'DELETE',
-    id: string | null,
-    body?: Record<string, any>,
-    options?: { hard?: boolean }
-  ): Promise<T | null> => {
-    setLoading(true)
-    setError(null)
-    try {
-      let url = id ? `/api/qms/${entity}/${id}` : `/api/qms/${entity}`
-      if (options?.hard) url += '?hard=true'
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
-      })
-
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || 'Erreur')
-      }
-
-      return res.status === 204 ? null : await res.json()
-    } catch (err: any) {
-      setError(err.message)
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return { execute, loading, error, setError }
+// ── Dashboard KPIs ─────────────────────────────────────────────────────────
+export function useDashboardKpis() {
+  return useQuery({
+    queryKey: ['dashboard', 'kpis'],
+    queryFn: () => apiGet<any>('/api/dashboard?view=kpi'),
+    staleTime: 30_000, // 30 seconds
+  })
 }
+
+// ── Upcoming Deadlines ─────────────────────────────────────────────────────
+export function useDeadlines(days: number = 14) {
+  return useQuery({
+    queryKey: ['dashboard', 'deadlines', days],
+    queryFn: () => apiGet<any>(`/api/dashboard?view=deadlines&days=${days}`),
+    staleTime: 60_000,
+  })
+}
+
+// ── Audit Trail ────────────────────────────────────────────────────────────
+export function useAuditTrail(params: { entity?: string; recordId?: string; limit?: number } = {}) {
+  const qs = new URLSearchParams()
+  if (params.entity) qs.set('entity', params.entity)
+  if (params.recordId) qs.set('recordId', params.recordId)
+  if (params.limit) qs.set('limit', String(params.limit))
+  const queryString = qs.toString()
+
+  return useQuery({
+    queryKey: ['audit-trail', params],
+    queryFn: () => apiGet<any>(`/api/audit${queryString ? `?${queryString}` : ''}`),
+    staleTime: 15_000,
+  })
+}
+
+// ── Notifications ──────────────────────────────────────────────────────────
+export function useNotifications(limit: number = 20) {
+  return useQuery({
+    queryKey: ['notifications', limit],
+    queryFn: () => apiGet<any>(`/api/qms/notifications?limit=${limit}&sort=createdAt&order=desc`),
+    staleTime: 10_000,
+  })
+}
+
+// ── React Query Provider ───────────────────────────────────────────────────
+// Add this to the root layout
