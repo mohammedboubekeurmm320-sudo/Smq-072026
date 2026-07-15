@@ -2,99 +2,161 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { apiGet } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   ArrowLeft, BarChart3, TrendingUp, ClipboardCheck, GraduationCap,
   Shield, Truck, LayoutDashboard, Download, Calendar, Loader2, FileText,
+  CheckCircle2, AlertCircle,
 } from 'lucide-react'
 
 // ─── Report types ──────────────────────────────────────────────────────────
 const REPORT_TYPES = [
   {
-    id: 'capa-analysis',
+    id: 'capa-analysis' as const,
     title: 'Analyse CAPA',
     description: 'Analyse détaillée des actions correctives et préventives : tendances, délais, efficacité.',
     icon: Shield,
     color: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-400',
-    lastGenerated: '2025-06-20T14:00:00Z',
   },
   {
-    id: 'ncr-trends',
+    id: 'ncr-trends' as const,
     title: 'Tendances NCR',
     description: 'Évolution des non-conformités par type, sévérité et département sur une période donnée.',
     icon: TrendingUp,
     color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-    lastGenerated: '2025-06-18T10:30:00Z',
   },
   {
-    id: 'audit-summary',
+    id: 'audit-summary' as const,
     title: 'Résumé des audits',
     description: 'Synthèse des audits internes et externes : constats, conformité, plans d\'action.',
     icon: ClipboardCheck,
     color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-    lastGenerated: '2025-06-15T16:00:00Z',
   },
   {
-    id: 'training-matrix',
+    id: 'training-matrix' as const,
     title: 'Matrice de formation',
     description: 'Vue d\'ensemble des compétences, formations réalisées et formations en retard.',
     icon: GraduationCap,
     color: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400',
-    lastGenerated: '2025-06-10T09:00:00Z',
   },
   {
-    id: 'risk-register',
+    id: 'risk-register' as const,
     title: 'Registre des risques',
     description: 'Inventaire complet des risques avec niveaux RPN et mesures de mitigation.',
     icon: BarChart3,
     color: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400',
-    lastGenerated: '2025-06-12T11:00:00Z',
   },
   {
-    id: 'supplier-scorecard',
+    id: 'supplier-scorecard' as const,
     title: 'Scorecard fournisseurs',
     description: 'Évaluation des performances fournisseurs : qualité, délais, conformité.',
     icon: Truck,
     color: 'bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-400',
-    lastGenerated: '2025-06-08T15:00:00Z',
   },
   {
-    id: 'compliance-dashboard',
+    id: 'compliance-dashboard' as const,
     title: 'Tableau de conformité',
     description: 'Vue consolidée du taux de conformité par exigence normative et par module.',
     icon: LayoutDashboard,
     color: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
-    lastGenerated: '2025-06-22T08:00:00Z',
   },
 ]
 
-const fmtDate = (d: string) => {
-  try { return new Date(d).toLocaleDateString('fr-FR') } catch { return '—' }
+const FORMAT_ICONS: Record<string, string> = {
+  pdf: '📄',
+  csv: '📊',
+  html: '🌐',
+}
+
+// ─── State for last generation timestamps ──────────────────────────────────
+interface LastGenerated {
+  [reportId: string]: string
 }
 
 export default function ReportsView() {
   const router = useRouter()
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [exportFormat, setExportFormat] = useState('csv')
+  const [exportFormat, setExportFormat] = useState('pdf')
   const [generating, setGenerating] = useState<string | null>(null)
+  const [lastGenerated, setLastGenerated] = useState<LastGenerated>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const handleGenerate = async (reportId: string) => {
+    // Clear previous error for this report
+    setErrors(prev => {
+      const next = { ...prev }
+      delete next[reportId]
+      return next
+    })
     setGenerating(reportId)
-    // Simulate generation
-    await new Promise(r => setTimeout(r, 1500))
-    setGenerating(null)
+
+    try {
+      const res = await fetch('/api/reports/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          type: reportId,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          format: exportFormat,
+        }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Erreur HTTP ${res.status}`)
+      }
+
+      // Download the file
+      const contentDisposition = res.headers.get('content-disposition')
+      let filename = `rapport_${reportId}_${new Date().toISOString().slice(0, 10)}.${exportFormat}`
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/)
+        if (match) filename = match[1]
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      // Update last generated timestamp
+      setLastGenerated(prev => ({
+        ...prev,
+        [reportId]: new Date().toISOString(),
+      }))
+
+      const reportTitle = REPORT_TYPES.find(r => r.id === reportId)?.title || reportId
+
+    } catch (err: any) {
+      const msg = err.message || 'Erreur lors de la génération'
+      setErrors(prev => ({ ...prev, [reportId]: msg }))
+
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  const fmtDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString('fr-FR') } catch { return '—' }
+  }
+
+  const fmtDateTime = (d: string) => {
+    try { return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '—' }
   }
 
   const totalReports = REPORT_TYPES.length
-  const scheduledReports = 3
 
   return (
     <div className="space-y-6">
@@ -107,7 +169,7 @@ export default function ReportsView() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <BarChart3 className="h-6 w-6" /> Rapports
           </h1>
-          <p className="text-sm text-muted-foreground">Centre de rapports et analyses qualité</p>
+          <p className="text-sm text-muted-foreground">Centre de rapports et analyses qualité — ISO 13485 §4.2.2</p>
         </div>
       </div>
 
@@ -130,8 +192,8 @@ export default function ReportsView() {
               <Calendar className="h-5 w-5 text-sky-700 dark:text-sky-400" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{scheduledReports}</p>
-              <p className="text-xs text-muted-foreground">Rapports programmés actifs</p>
+              <p className="text-2xl font-bold">{Object.keys(lastGenerated).length}</p>
+              <p className="text-xs text-muted-foreground">Rapports générés cette session</p>
             </div>
           </CardContent>
         </Card>
@@ -166,8 +228,8 @@ export default function ReportsView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="csv">CSV</SelectItem>
                   <SelectItem value="pdf">PDF</SelectItem>
+                  <SelectItem value="csv">CSV</SelectItem>
                   <SelectItem value="html">HTML</SelectItem>
                 </SelectContent>
               </Select>
@@ -180,8 +242,12 @@ export default function ReportsView() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORT_TYPES.map(rpt => {
           const Icon = rpt.icon
+          const isGenerating = generating === rpt.id
+          const lastGen = lastGenerated[rpt.id]
+          const errorMsg = errors[rpt.id]
+
           return (
-            <Card key={rpt.id} className="hover:shadow-md transition-shadow">
+            <Card key={rpt.id} className={`hover:shadow-md transition-shadow ${errorMsg ? 'border-red-200 dark:border-red-900' : ''}`}>
               <CardHeader className="pb-2">
                 <div className="flex items-start justify-between">
                   <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${rpt.color}`}>
@@ -192,23 +258,35 @@ export default function ReportsView() {
                     size="sm"
                     className="h-8"
                     onClick={() => handleGenerate(rpt.id)}
-                    disabled={generating === rpt.id}
+                    disabled={isGenerating}
                   >
-                    {generating === rpt.id ? (
+                    {isGenerating ? (
                       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                     ) : (
                       <Download className="h-3 w-3 mr-1" />
                     )}
-                    Générer
+                    {isGenerating ? 'Génération...' : 'Générer'}
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
                 <CardTitle className="text-base mb-1">{rpt.title}</CardTitle>
                 <CardDescription className="text-xs line-clamp-2 mb-3">{rpt.description}</CardDescription>
-                <p className="text-xs text-muted-foreground">
-                  Dernière génération : {fmtDate(rpt.lastGenerated)}
-                </p>
+                {lastGen ? (
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Dernière génération : {fmtDateTime(lastGen)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {FORMAT_ICONS[exportFormat]} Pas encore généré cette session
+                  </p>
+                )}
+                {errorMsg && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> {errorMsg}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )
