@@ -7,6 +7,8 @@ import { OrgSwitcher } from '@/components/qms/OrgSwitcher'
 import { NotificationBell } from '@/components/qms/NotificationBell'
 import { UserMenu } from '@/components/qms/UserMenu'
 import { GlobalSearch } from '@/components/shared/GlobalSearch'
+import { MobileBottomNav } from '@/components/shared/MobileBottomNav'
+import { ThemeToggle } from '@/components/shared/ThemeToggle'
 import { SIDEBAR_NAV, type NavGroup } from '@/lib/qms-entity-map'
 import { cn } from '@/lib/utils'
 import { Menu, ShieldCheck, PanelLeftClose, PanelLeft } from 'lucide-react'
@@ -19,13 +21,31 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard, Shield, AlertTriangle, AlertOctagon, ArrowLeftRight,
   ClipboardCheck, FileText, GraduationCap, Package, Truck, BarChart3,
-  History, Bell, Search as SearchIcon, Settings,
+  History, Bell, Search as SearchIcon, Settings, FileQuestion,
+  FileSpreadsheet, Clock, Users,
 } from 'lucide-react'
 
 const ICON_MAP: Record<string, any> = {
   LayoutDashboard, Shield, AlertTriangle, AlertOctagon, ArrowLeftRight,
   ClipboardCheck, FileText, GraduationCap, Package, Truck, BarChart3,
-  History, Bell, Search: SearchIcon, ShieldCheck, Settings,
+  History, Bell, Search: SearchIcon, ShieldCheck, Settings, FileQuestion,
+  FileSpreadsheet, Clock, Users,
+}
+
+function resolveHref(slug: string): string {
+  const specials: Record<string, string> = {
+    'dashboard': '/dashboard',
+    'audit-trail': '/audit',
+    'notifications': '/notifications',
+    'deadlines': '/deadlines',
+    'compliance': '/compliance',
+    'admin-settings': '/admin/settings',
+    'admin-users': '/admin/users',
+    'reports': '/reports',
+    'oos-oot': '/oos-oot',
+    'forms': '/forms',
+  }
+  return specials[slug] || `/${slug}`
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -120,20 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </p>
                 )}
                 {group.items.map((item) => {
-                  const href = item.slug === 'dashboard'
-                    ? '/dashboard'
-                    : item.slug === 'audit-trail'
-                    ? '/audit'
-                    : item.slug === 'notifications'
-                    ? '/notifications'
-                    : item.slug === 'deadlines'
-                    ? '/deadlines'
-                    : item.slug === 'compliance'
-                    ? '/compliance'
-                    : item.slug === 'admin-settings'
-                    ? '/admin/settings'
-                    : `/qms/${item.slug}`
-
+                  const href = resolveHref(item.slug)
                   const isActive = pathname === href || pathname?.startsWith(href + '/')
                   const Icon = ICON_MAP[item.icon] || ShieldCheck
 
@@ -146,7 +153,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         'flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors',
                         sidebarOpen ? '' : 'justify-center px-2',
                         isActive
-                          ? 'bg-primary/10 text-primary font-medium'
+                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-medium'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                       )}
                     >
@@ -161,15 +168,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </nav>
         </ScrollArea>
 
-        {/* ISO badge */}
-        {sidebarOpen && (
-          <div className="p-4 border-t">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span>Conforme ISO 13485:2016</span>
+        {/* Bottom section: theme toggle + ISO badge */}
+        <div className="p-4 border-t space-y-2">
+          {sidebarOpen && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                <span>ISO 13485:2016</span>
+              </div>
+              <ThemeToggle />
             </div>
-          </div>
-        )}
+          )}
+          {!sidebarOpen && (
+            <div className="flex justify-center">
+              <ThemeToggle />
+            </div>
+          )}
+        </div>
       </aside>
 
       {/* Main area */}
@@ -210,9 +225,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
           {children}
         </main>
+
+        {/* Mobile bottom nav (visible on small screens only) */}
+        <MobileBottomNav activeSection={pathname} onNavigate={(href) => router.push(href)} />
       </div>
 
       {/* Global Search Dialog */}

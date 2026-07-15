@@ -38,45 +38,21 @@ server.log
 pids
 *.pid
 *.seed
-*.pid.lock
-
-# Coverage
-coverage/
-*.lcov
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Tool results & uploads
-tool-results/
-upload/
-download/
-
-# Z scripts
+# Agent/tool artifacts
+agent-ctx/
 .zscripts/
-
-# Skills (internal)
-skills/
-
-# Examples (internal)
-examples/
-
-# Mini-services (if not used)
-mini-services/
-
-# Backups
-_backup/
-*.bak
-
-# Temporary files
-*.tmp
-*.temp
-.env
+tool-results/
+worklog.md
+smq-072026/
+Caddyfile

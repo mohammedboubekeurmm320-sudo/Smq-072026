@@ -1,116 +1,86 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import type { Locale, Translations } from '@/types/i18n'
+import fr from '@/lib/i18n/fr'
+import en from '@/lib/i18n/en'
 
-type Locale = 'fr' | 'en'
+// ─── Translation registry ────────────────────────────────────────────────
+const TRANSLATIONS: Record<Locale, Translations> = { fr, en }
 
+// ─── Resolve a dot-notation key from a nested object ─────────────────────
+function resolve(obj: unknown, path: string): string {
+  const keys = path.split('.')
+  let current: unknown = obj
+  for (const key of keys) {
+    if (current === null || current === undefined || typeof current !== 'object') return path
+    current = (current as Record<string, unknown>)[key]
+  }
+  return typeof current === 'string' ? current : path
+}
+
+// ─── Context shape ───────────────────────────────────────────────────────
 interface I18nContextValue {
+  /** Current locale */
   locale: Locale
+  /** Switch locale (persists to localStorage) */
   setLocale: (l: Locale) => void
+  /**
+   * Translate a dot-notation key.
+   * Example: `t('modules.capa.title')` → `'Gestion CAPA'`
+   * Falls back to the key itself when not found.
+   */
   t: (key: string) => string
+  /** Right-to-left flag (always false for fr/en, kept for extensibility) */
+  isRTL: boolean
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 
-const TRANSLATIONS: Record<Locale, Record<string, string>> = {
-  fr: {
-    'nav.dashboard': 'Tableau de Bord',
-    'nav.documents': 'Documents',
-    'nav.documentHierarchy': 'Hiérarchie Documentaire',
-    'nav.ncr': 'Non-Conformités',
-    'nav.capa': 'CAPA',
-    'nav.deviations': 'Déviations',
-    'nav.changeControl': 'Contrôle des Changements',
-    'nav.audits': 'Audits',
-    'nav.risks': 'Risques',
-    'nav.training': 'Formation',
-    'nav.batchRecords': 'Dossiers de Lot',
-    'nav.suppliers': 'Fournisseurs',
-    'nav.oosOot': 'OOS/OOT',
-    'nav.forms': 'Formulaires',
-    'nav.recordTypes': 'Types d\'Enregistrements',
-    'nav.customRecords': 'Enregistrements Personnalisés',
-    'nav.reports': 'Rapports',
-    'nav.compliance': 'Conformité',
-    'nav.scheduledReports': 'Rapports Planifiés',
-    'nav.auditTrail': 'Piste d\'Audit',
-    'nav.userManagement': 'Utilisateurs',
-    'nav.settings': 'Paramètres',
-    'common.save': 'Enregistrer',
-    'common.cancel': 'Annuler',
-    'common.delete': 'Supprimer',
-    'common.edit': 'Modifier',
-    'common.create': 'Créer',
-    'common.search': 'Rechercher',
-    'common.loading': 'Chargement…',
-    'group.pilotage': 'Pilotage',
-    'group.gouvernance': 'Gouvernance Documentaire',
-    'group.qualite': 'Qualité & Amélioration',
-    'group.production': 'Production & Achats',
-    'group.administration': 'Administration',
-  },
-  en: {
-    'nav.dashboard': 'Dashboard',
-    'nav.documents': 'Documents',
-    'nav.documentHierarchy': 'Document Hierarchy',
-    'nav.ncr': 'Non-Conformities',
-    'nav.capa': 'CAPA',
-    'nav.deviations': 'Deviations',
-    'nav.changeControl': 'Change Control',
-    'nav.audits': 'Audits',
-    'nav.risks': 'Risks',
-    'nav.training': 'Training',
-    'nav.batchRecords': 'Batch Records',
-    'nav.suppliers': 'Suppliers',
-    'nav.oosOot': 'OOS/OOT',
-    'nav.forms': 'Forms',
-    'nav.recordTypes': 'Record Types',
-    'nav.customRecords': 'Custom Records',
-    'nav.reports': 'Reports',
-    'nav.compliance': 'Compliance',
-    'nav.scheduledReports': 'Scheduled Reports',
-    'nav.auditTrail': 'Audit Trail',
-    'nav.userManagement': 'User Management',
-    'nav.settings': 'Settings',
-    'common.save': 'Save',
-    'common.cancel': 'Cancel',
-    'common.delete': 'Delete',
-    'common.edit': 'Edit',
-    'common.create': 'Create',
-    'common.search': 'Search',
-    'common.loading': 'Loading…',
-    'group.pilotage': 'Overview',
-    'group.gouvernance': 'Document Governance',
-    'group.qualite': 'Quality & Improvement',
-    'group.production': 'Production & Procurement',
-    'group.administration': 'Administration',
-  },
-}
+const STORAGE_KEY = 'qms_locale'
 
+// ─── Provider ────────────────────────────────────────────────────────────
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('fr')
 
+  // Hydrate from localStorage on mount
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('qms_locale') as Locale : null
+    if (typeof window === 'undefined') return
+    const saved = localStorage.getItem(STORAGE_KEY) as Locale | null
     if (saved === 'fr' || saved === 'en') setLocaleState(saved)
   }, [])
 
-  const setLocale = (l: Locale) => {
+  const setLocale = useCallback((l: Locale) => {
     setLocaleState(l)
-    if (typeof window !== 'undefined') localStorage.setItem('qms_locale', l)
-  }
+    if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, l)
+  }, [])
 
-  const t = (key: string) => TRANSLATIONS[locale][key] || key
-
-  return (
-    <I18nContext.Provider value={{ locale, setLocale, t }}>
-      {children}
-    </I18nContext.Provider>
+  const t = useCallback(
+    (key: string) => resolve(TRANSLATIONS[locale], key),
+    [locale],
   )
+
+  const isRTL = false // French & English are LTR; extend for Arabic/Hebrew
+
+  const value = useMemo<I18nContextValue>(
+    () => ({ locale, setLocale, t, isRTL }),
+    [locale, setLocale, t, isRTL],
+  )
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 
-export function useI18n() {
+// ─── Hook ────────────────────────────────────────────────────────────────
+export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext)
-  if (!ctx) return { locale: 'fr' as Locale, setLocale: () => {}, t: (k: string) => k }
+  if (!ctx) {
+    // Fallback for usage outside provider (SSR, tests)
+    return {
+      locale: 'fr',
+      setLocale: () => {},
+      t: (key: string) => resolve(fr, key),
+      isRTL: false,
+    }
+  }
   return ctx
 }

@@ -12,31 +12,62 @@ interface Props {
   open: boolean
   title: string
   description: string
-  onConfirm: (password: string, signatureHash: string) => void
+  /** If provided, the signature is linked to a specific record */
+  recordId?: string
+  recordType?: string
+  documentId?: string
+  /** Signature purpose: 'approval', 'rejection', 'review', 'verification' */
+  purpose?: string
+  onConfirm: (password: string, signatureHash: string, signatureId?: string) => void
   onCancel: () => void
 }
 
-export function ElectronicSignatureModal({ open, title, description, onConfirm, onCancel }: Props) {
-  const { profile, login } = useAuth()
+export function ElectronicSignatureModal({
+  open, title, description, onConfirm, onCancel,
+  recordId, recordType, documentId, purpose = 'approval',
+}: Props) {
+  const { user } = useAuth()
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const handleConfirm = async () => {
-    if (!profile) return
+    if (!user) return
     setError('')
     setSubmitting(true)
-    // Verify password by attempting login
-    const r = await login(profile.email, password)
-    setSubmitting(false)
-    if (!r.ok) {
-      setError('Mot de passe incorrect')
-      return
+
+    try {
+      // Call server-side HMAC-SHA256 signature endpoint (21 CFR Part 11 §11.100)
+      const res = await fetch('/api/auth/verify-signature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          password,
+          purpose,
+          recordId,
+          recordType,
+          documentId,
+        }),
+        credentials: 'include',
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Erreur de signature')
+        setSubmitting(false)
+        return
+      }
+
+      // Server returns cryptographic HMAC-SHA256 hash
+      onConfirm(password, data.data.signatureHash, data.data.signatureId)
+      setPassword('')
+    } catch {
+      setError('Erreur de connexion au serveur')
+    } finally {
+      setSubmitting(false)
     }
-    // Generate signature hash
-    const hash = `SIG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`
-    onConfirm(password, hash)
-    setPassword('')
   }
 
   return (
@@ -54,12 +85,12 @@ export function ElectronicSignatureModal({ open, title, description, onConfirm, 
             <ShieldCheck className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-medium">Signature électronique 21 CFR Part 11</p>
-              <p>Cette action sera signée électroniquement et enregistrée dans la piste d'audit immuable. Votre identité sera associée à cette signature de manière permanente.</p>
+              <p>Cette action sera signée électroniquement via HMAC-SHA256 côté serveur et enregistrée dans la piste d&apos;audit immuable. Votre identité sera associée à cette signature de manière permanente et vérifiable.</p>
             </div>
           </div>
           <div>
             <Label>Signataire</Label>
-            <div className="text-sm font-medium mt-1">{profile?.fullName} ({profile?.role})</div>
+            <div className="text-sm font-medium mt-1">{user?.full_name} ({user?.role})</div>
           </div>
           <div>
             <Label htmlFor="esig-pwd">Mot de passe (confirmation)</Label>

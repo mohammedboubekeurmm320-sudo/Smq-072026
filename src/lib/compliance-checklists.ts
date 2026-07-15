@@ -1,5 +1,5 @@
 // Compliance checklists — ISO 13485:2016, ICH Q10, IVDR EU 2017/746
-// Replicated from smq-iso-13485-pro
+// Replicated from smq-iso-13485-pro — Updated with correct IVDR articles & missing ICH Q10 clauses
 
 export type ClauseCategory = 'quality_system' | 'management' | 'resources' | 'realization' | 'measurement' | 'improvement';
 export type ClauseStatus = 'compliant' | 'partially' | 'non_compliant' | 'not_assessed';
@@ -34,6 +34,8 @@ export interface ComplianceData {
   closedCapa: number;
   totalCapa: number;
   capaWithRootCause: number;
+  qualifiedSupplierCount: number;
+  totalSupplierCount: number;
   customRecordTypeCounts: number;
 }
 
@@ -85,7 +87,7 @@ export const ISO_13485_CHECKLIST: Checklist = {
 };
 
 // ============================================================================
-// ICH Q10 Checklist — 13 clauses
+// ICH Q10 Checklist — 15 clauses (added 3.2.1 Root Cause + 5.1 Supplier Qualification)
 // ============================================================================
 export const ICH_Q10_CHECKLIST: Checklist = {
   id: 'ichq10',
@@ -99,18 +101,21 @@ export const ICH_Q10_CHECKLIST: Checklist = {
     { id: 'ichq10-2.3', clause: '2.3', title: 'Quality Risk Management', category: 'management', description: 'Intégration de l\'ICH Q9 dans le PQS', evidenceFields: ['risks'], calculator: (d) => { const p = pct(d.totalRisk - d.openRisk, d.totalRisk); return { percent: p, status: statusFromPct(p), evidence: [`${d.totalRisk - d.openRisk}/${d.totalRisk} risques traités`] }; } },
     { id: 'ichq10-3.1', clause: '3.1', title: 'Process Performance & Product Quality Monitoring', category: 'measurement', description: 'Surveillance des indicateurs critiques', evidenceFields: ['ncrs'], calculator: (d) => { const p = pct(d.closedNcr, d.totalNcr); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedNcr}/${d.totalNcr} NCR clos`] }; } },
     { id: 'ichq10-3.2', clause: '3.2', title: 'CAPA System', category: 'improvement', description: 'Système d\'actions correctives et préventives', evidenceFields: ['capas'], calculator: (d) => { const p = pct(d.closedCapa, d.totalCapa); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedCapa}/${d.totalCapa} CAPAs clos`] }; } },
+    { id: 'ichq10-3.2.1', clause: '3.2.1', title: 'Root Cause Investigation', category: 'improvement', description: 'Investigation systématique de la cause racine pour chaque CAPA (ICH Q10 §3.2.1)', evidenceFields: ['capas'], calculator: (d) => { const p = pct(d.capaWithRootCause, d.totalCapa); return { percent: p, status: statusFromPct(p), evidence: [`${d.capaWithRootCause}/${d.totalCapa} CAPAs avec cause racine documentée`] }; } },
     { id: 'ichq10-3.3', clause: '3.3', title: 'Change Management', category: 'improvement', description: 'Système de gestion du changement', evidenceFields: ['capas'], calculator: (d) => { const p = pct(d.capaWithRootCause, d.totalCapa); return { percent: p, status: statusFromPct(p), evidence: [`${d.capaWithRootCause}/${d.totalCapa} CAPAs documentées`] }; } },
     { id: 'ichq10-3.4', clause: '3.4', title: 'Management Review', category: 'management', description: 'Revue de direction du PQS', evidenceFields: ['audits'], calculator: (d) => { const p = pct(d.completedAuditCount, d.totalAuditCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.completedAuditCount}/${d.totalAuditCount} audits`] }; } },
     { id: 'ichq10-4.1', clause: '4.1', title: 'Training & Personnel', category: 'resources', description: 'Formation et qualification du personnel', evidenceFields: ['training'], calculator: (d) => { const p = pct(d.completedTraining, d.totalTraining); return { percent: p, status: statusFromPct(p), evidence: [`${d.completedTraining}/${d.totalTraining} formations`] }; } },
     { id: 'ichq10-4.2', clause: '4.2', title: 'Documentation', category: 'quality_system', description: 'Documentation du PQS, manuel qualité', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
     { id: 'ichq10-5', clause: '5', title: 'Manufacturing Operations', category: 'realization', description: 'Opérations de fabrication, contrôle en cours', evidenceFields: ['batches'], calculator: (d) => { const p = pct(d.releasedBatch, d.totalBatch); return { percent: p, status: statusFromPct(p), evidence: [`${d.releasedBatch}/${d.totalBatch} lots libérés`] }; } },
+    { id: 'ichq10-5.1', clause: '5.1', title: 'Supplier Qualification', category: 'realization', description: 'Qualification et évaluation des fournisseurs, audit qualité fournisseur (ICH Q10 §5.1)', evidenceFields: ['suppliers'], calculator: (d) => { const p = pct(d.qualifiedSupplierCount, d.totalSupplierCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.qualifiedSupplierCount}/${d.totalSupplierCount} fournisseurs qualifiés`] }; } },
     { id: 'ichq10-6', clause: '6', title: 'Laboratory Controls', category: 'measurement', description: 'Contrôles laboratoires, OOS/OOT', evidenceFields: ['ncrs'], calculator: (d) => { const p = pct(d.closedNcr, d.totalNcr); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedNcr}/${d.totalNcr} NCR clos`] }; } },
     { id: 'ichq10-7', clause: '7', title: 'Continuous Improvement', category: 'improvement', description: 'Amélioration continue du PQS', evidenceFields: ['capas'], calculator: (d) => { const p = pct(d.closedCapa, d.totalCapa); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedCapa}/${d.totalCapa} CAPAs clos`] }; } },
   ],
 };
 
 // ============================================================================
-// IVDR EU 2017/746 Checklist — 12 clauses
+// IVDR EU 2017/746 Checklist — 12 articles (correct article numbering)
+// Articles: 4, 8, 10, 10(4), 10(9), 12, 13, 15, 16, 56, 83, 87
 // ============================================================================
 export const IVDR_CHECKLIST: Checklist = {
   id: 'ivdr',
@@ -118,18 +123,18 @@ export const IVDR_CHECKLIST: Checklist = {
   standard: 'IVDR EU 2017/746',
   industries: ['ivd'],
   clauses: [
-    { id: 'ivdr-4', clause: '4', title: 'Exigences Générales S&D', category: 'quality_system', description: 'Exigences de sécurité et de performance pour les DV', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
-    { id: 'ivdr-5', clause: '5', title: 'Instructions & Informations', category: 'quality_system', description: 'Instructions d\'utilisation, étiquetage', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
-    { id: 'ivdr-6', clause: '6', title: 'Traceability (UDI)', category: 'realization', description: 'Identification unique des dispositifs (UDI)', evidenceFields: ['batches'], calculator: (d) => { const p = pct(d.batchWithProductCode, d.totalBatch); return { percent: p, status: statusFromPct(p), evidence: [`${d.batchWithProductCode}/${d.totalBatch} lots tracés`] }; } },
-    { id: 'ivdr-8', clause: '8', title: 'Obligations Fabricants', category: 'management', description: 'Responsabilités fabricant, SMQ', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
-    { id: 'ivdr-10', clause: '10', title: 'Documentation Technique', category: 'quality_system', description: 'Documentation technique requise', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
-    { id: 'ivdr-11', clause: '11', title: 'Responsable Conformité Réglementaire', category: 'management', description: 'Personne responsable de la conformité réglementaire', evidenceFields: ['training'], calculator: (d) => { const p = pct(d.completedTraining, d.totalTraining); return { percent: p, status: statusFromPct(p), evidence: [`${d.completedTraining}/${d.totalTraining} formations`] }; } },
-    { id: 'ivdr-12', clause: '12', title: 'Évaluation Performance', category: 'realization', description: 'Évaluation des performances analytiques et cliniques', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.validationDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.validationDocCount}/${d.totalDocCount} docs validation`] }; } },
-    { id: 'ivdr-13', clause: '13', title: 'PRCG', category: 'measurement', description: 'Plan de revue de conformité globale (PRCG)', evidenceFields: ['audits'], calculator: (d) => { const p = pct(d.completedAuditCount, d.totalAuditCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.completedAuditCount}/${d.totalAuditCount} audits`] }; } },
-    { id: 'ivdr-14', clause: '14', title: 'Système Notification Incidents', category: 'measurement', description: 'Vigilance et notification d\'incidents graves', evidenceFields: ['ncrs'], calculator: (d) => { const p = pct(d.closedNcr, d.totalNcr); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedNcr}/${d.totalNcr} NCR clos`] }; } },
-    { id: 'ivdr-15', clause: '15', title: 'Mesures Correctives', category: 'improvement', description: 'Mesures correctives de sécurité (FSCA)', evidenceFields: ['capas'], calculator: (d) => { const p = pct(d.closedCapa, d.totalCapa); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedCapa}/${d.totalCapa} CAPAs clos`] }; } },
-    { id: 'ivdr-16', clause: '16', title: 'Demandes Conformité', category: 'regulatory' as any, description: 'Procédures d\'évaluation de conformité', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
-    { id: 'ivdr-17', clause: '17', title: 'Marquage CE', category: 'quality_system', description: 'Marquage CE et déclaration de conformité', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
+    { id: 'ivdr-art4', clause: 'Art. 4', title: 'Exigences Générales de Sécurité et Performance', category: 'quality_system', description: 'Art. 4 — Exigences de sécurité et de performance pour les dispositifs médicaux de diagnostic in vitro', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents approuvés`] }; } },
+    { id: 'ivdr-art8', clause: 'Art. 8', title: 'Obligations des Fabricants', category: 'management', description: 'Art. 8 — Responsabilités générales du fabricant, système de management de la qualité', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
+    { id: 'ivdr-art10', clause: 'Art. 10', title: 'Documentation Technique', category: 'quality_system', description: 'Art. 10 — Contenu de la documentation technique, IFU, preuve de conformité', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents`] }; } },
+    { id: 'ivdr-art10-4', clause: 'Art. 10(4)', title: 'Preuves de Conformité', category: 'quality_system', description: 'Art. 10(4) — Preuves de conformité aux exigences de sécurité et de performance', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.validationDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.validationDocCount}/${d.totalDocCount} documents de validation/performance`] }; } },
+    { id: 'ivdr-art10-9', clause: 'Art. 10(9)', title: 'Identification Unique des Dispositifs (UDI)', category: 'realization', description: 'Art. 10(9) — Système UDI, affectation UDI-DI, base de données EUDAMED', evidenceFields: ['batches'], calculator: (d) => { const p = pct(d.batchWithProductCode, d.totalBatch); return { percent: p, status: statusFromPct(p), evidence: [`${d.batchWithProductCode}/${d.totalBatch} lots avec code produit (UDI)`] }; } },
+    { id: 'ivdr-art12', clause: 'Art. 12', title: 'Évaluation des Performances Analytiques et Cliniques', category: 'realization', description: 'Art. 12 — Plan d\'évaluation des performances, études de performance analytique et clinique', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.validationDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.validationDocCount}/${d.totalDocCount} documents d\'évaluation de performance`] }; } },
+    { id: 'ivdr-art13', clause: 'Art. 13', title: 'Plan de Revue Post-Commercialisation (PRCG)', category: 'measurement', description: 'Art. 13 — Plan de revue de conformité globale, collecte de données de performance', evidenceFields: ['audits'], calculator: (d) => { const p = pct(d.completedAuditCount, d.totalAuditCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.completedAuditCount}/${d.totalAuditCount} audits de revue`] }; } },
+    { id: 'ivdr-art15', clause: 'Art. 15', title: 'Vigilance et Signalement des Incidents', category: 'measurement', description: 'Art. 15 — Obligations de signalement, rapport de tendances, registre des incidents', evidenceFields: ['ncrs'], calculator: (d) => { const p = pct(d.closedNcr, d.totalNcr); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedNcr}/${d.totalNcr} incidents clôturés`] }; } },
+    { id: 'ivdr-art16', clause: 'Art. 16', title: 'Actions Correctives de Sécurité (FSCA)', category: 'improvement', description: 'Art. 16 — Mesures correctives de sécurité, notifications aux autorités et utilisateurs', evidenceFields: ['capas'], calculator: (d) => { const p = pct(d.closedCapa, d.totalCapa); return { percent: p, status: statusFromPct(p), evidence: [`${d.closedCapa}/${d.totalCapa} actions correctives closes`] }; } },
+    { id: 'ivdr-art56', clause: 'Art. 56', title: 'Organismes Notifiés — Désignation', category: 'management', description: 'Art. 56 — Désignation, surveillance et évaluation des organismes notifiés', evidenceFields: ['audits'], calculator: (d) => { const p = pct(d.completedAuditCount, d.totalAuditCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.completedAuditCount}/${d.totalAuditCount} audits réalisés`] }; } },
+    { id: 'ivdr-art83', clause: 'Art. 83', title: 'Exigences Relatives aux Essais Cliniques', category: 'realization', description: 'Art. 83 — Investigations cliniques, autorisation, rapport de sécurité, droits des sujets', evidenceFields: ['documents', 'risks'], calculator: (d) => { const p = pct(d.totalRisk - d.openRisk, d.totalRisk); return { percent: p, status: statusFromPct(p), evidence: [`${d.totalRisk - d.openRisk}/${d.totalRisk} risques de l\'essai gérés`] }; } },
+    { id: 'ivdr-art87', clause: 'Art. 87', title: 'Dispositions Transitoires', category: 'management', description: 'Art. 87 — Délais de transition, certificats délivrés conformément à la directive IVDD 98/79/CE', evidenceFields: ['documents'], calculator: (d) => { const p = pct(d.approvedDocCount, d.totalDocCount); return { percent: p, status: statusFromPct(p), evidence: [`${d.approvedDocCount}/${d.totalDocCount} documents conformes`] }; } },
   ],
 };
 
@@ -159,13 +164,14 @@ export function buildComplianceData(input: {
   const training = input.training || [];
   const risks = input.risks || [];
   const batches = input.batchRecords || [];
+  const suppliers = input.suppliers || [];
 
   return {
     approvedDocCount: docs.filter((d: any) => d.status === 'Approved' || d.status === 'Effective').length,
     totalDocCount: docs.length,
     inReviewDocCount: docs.filter((d: any) => d.status === 'Under Review').length,
-    recordDocCount: docs.filter((d: any) => ['ENREGISTREMENT', 'REGISTRE', 'Form'].includes(d.docType)).length,
-    validationDocCount: docs.filter((d: any) => d.validationPhase === 'IQ' || d.validationPhase === 'OQ' || d.validationPhase === 'PQ' || d.validationPhase === 'Full').length,
+    recordDocCount: docs.filter((d: any) => ['ENREGISTREMENT', 'REGISTRE', 'Form'].includes(d.doc_type || d.docType)).length,
+    validationDocCount: docs.filter((d: any) => d.validation_phase || d.validationPhase || d.doc_type === 'MASTER_BATCH').length,
     completedAuditCount: audits.filter((a: any) => a.status === 'Completed').length,
     totalAuditCount: audits.length,
     completedTraining: training.filter((t: any) => t.status === 'Completed').length,
@@ -174,12 +180,14 @@ export function buildComplianceData(input: {
     totalRisk: risks.length,
     releasedBatch: batches.filter((b: any) => b.status === 'Released').length,
     totalBatch: batches.length,
-    batchWithProductCode: batches.filter((b: any) => b.productCode).length,
+    batchWithProductCode: batches.filter((b: any) => b.product_code || b.productCode).length,
     closedNcr: ncrs.filter((n: any) => n.status === 'Closed').length,
     totalNcr: ncrs.length,
     closedCapa: capas.filter((c: any) => c.status === 'Closed').length,
     totalCapa: capas.length,
-    capaWithRootCause: capas.filter((c: any) => c.rootCauseAnalysis || c.rootCauseCategory).length,
+    capaWithRootCause: capas.filter((c: any) => c.root_cause_category || c.rootCauseCategory || c.root_cause_analysis || c.rootCauseAnalysis).length,
+    qualifiedSupplierCount: suppliers.filter((s: any) => s.status === 'Qualified').length,
+    totalSupplierCount: suppliers.length,
     customRecordTypeCounts: input.customInstances?.length || 0,
   };
 }

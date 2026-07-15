@@ -1,10 +1,19 @@
 // ============================================================
 // MIDDLEWARE: Custom Auth (bcrypt + base64 session cookie)
 // Valide la session, injecte x-profile-id header pour RLS
+// Applies rate limiting to auth endpoints (Tier 1)
 // ============================================================
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { authRateLimit, getRateLimitKey } from '@/lib/rate-limit'
+
+// Auth endpoints that get Tier 1 rate limiting (before auth check)
+const RATE_LIMITED_AUTH_PATHS = [
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/verify-signature',
+]
 
 // Routes publiques (pas d'auth requise)
 const PUBLIC_PATHS = [
@@ -21,10 +30,41 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(p => pathname.startsWith(p))
 }
 
+function isRateLimitedAuthPath(pathname: string): boolean {
+  return RATE_LIMITED_AUTH_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Laisser passer les routes publiques
+  // ---- Rate limiting for auth endpoints (before any auth check) ----
+  if (isRateLimitedAuthPath(pathname) && request.method === 'POST') {
+    const key = getRateLimitKey(request)
+    const { allowed, remaining, resetAt } = authRateLimit(key)
+
+    if (!allowed) {
+      const retryAfterSeconds = Math.ceil((resetAt - Date.now()) / 1000)
+      return NextResponse.json(
+        { error: 'Trop de requêtes. Veuillez réessayer plus tard.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(retryAfterSeconds),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(resetAt),
+          },
+        },
+      )
+    }
+
+    // Allowed — inject rate limit headers into the downstream response
+    const response = NextResponse.next()
+    response.headers.set('X-RateLimit-Remaining', String(remaining))
+    response.headers.set('X-RateLimit-Reset', String(resetAt))
+    return response
+  }
+
+  // Laisser passer les autres routes publiques (login page, signup page, static)
   if (isPublicPath(pathname)) {
     return NextResponse.next()
   }
