@@ -81,6 +81,7 @@ export default function EntityListPage() {
           <Button onClick={() => router.push(`/qms/${entity}/new`)}>
           <Plus className="h-4 w-4 mr-2" /> Nouveau
         </Button>
+        </div>
       </div>
 
       {/* Filters */}

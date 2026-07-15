@@ -19,7 +19,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard, Shield, AlertTriangle, AlertOctagon, ArrowLeftRight,
   ClipboardCheck, FileText, GraduationCap, Package, Truck, BarChart3,
-  History, Bell, Search as SearchIcon, ShieldCheck, Settings,
+  History, Bell, Search as SearchIcon, Settings,
 } from 'lucide-react'
 
 const ICON_MAP: Record<string, any> = {
