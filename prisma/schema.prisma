@@ -770,3 +770,16 @@ model ScheduledReport {
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   @@map("scheduled_reports")
 }
+
+// ============================================================================
+// Audit Configuration (singleton — HMAC signing salt for blockchain integrity)
+// 21 CFR Part 11 §11.10 — Audit trail system integrity
+// ============================================================================
+
+model AuditConfig {
+  id          String   @id @default("singleton")
+  signingSalt String   @map("signing_salt")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  @@map("audit_config")
+}
