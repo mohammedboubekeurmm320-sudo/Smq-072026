@@ -116,3 +116,27 @@ export async function POST(request: NextRequest) {
     return err(e.message || 'Server error', 500)
   }
 }
+
+/**
+// DELETE /api/record-links
+// Body: { id: string }
+// Delete a record link
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    await requireAuth()
+    const { client } = await getAuthenticatedClient(request)
+    if (!client) return err('Unauthorized', 401)
+
+    const body = await request.json()
+    const { id } = body as { id: string }
+    if (!id) return err('id is required')
+
+    const { error } = await client.from('record_links').delete().eq('id', id)
+    if (error) return err(error.message)
+    return ok({ deleted: true })
+  } catch (e: any) {
+    if (e.message === 'Non authentifié') return err('Non authentifié', 401)
+    return err(e.message || 'Server error', 500)
+  }
+}

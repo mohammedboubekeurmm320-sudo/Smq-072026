@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DocumentTriggersPanel } from '@/components/shared/DocumentTriggersPanel'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -318,6 +319,8 @@ export default function DocumentControlView() {
                     <Button size="sm" variant="outline" onClick={() => requestTransition(selectedDoc.id, 'Obsolete')}><Archive className="h-4 w-4 mr-2" /> Archiver</Button>
                   )}
                 </div>
+                <Separator />
+                <DocumentTriggersPanel documentId={selectedDoc.id} documentTitle={selectedDoc.title} />
               </div>
             </>
           )}

@@ -7,6 +7,7 @@ import { getFlowSteps, canTransition } from '@/lib/status-flows'
 import { getStatusColor } from '@/lib/status-colors'
 import { ResponsiveTable } from '@/components/shared/ResponsiveTable'
 import { ElectronicSignatureModal } from '@/components/shared/ElectronicSignatureModal'
+import { RecordLinkPanel } from '@/components/shared/RecordLinkPanel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -401,6 +402,9 @@ export default function CapaView() {
                     <Button onClick={saveEffectiveness} disabled={savingAnalysis}>
                       <Save className="h-4 w-4 mr-2" /> {savingAnalysis ? 'Enregistrement...' : 'Enregistrer la vérification'}
                     </Button>
+                  </TabsContent>
+                  <TabsContent value="links" className="mt-4">
+                    <RecordLinkPanel recordId={selected.id} recordType="capas" recordTitle={selected.title || selected.capa_number} />
                   </TabsContent>
                 </Tabs>
               </div>
