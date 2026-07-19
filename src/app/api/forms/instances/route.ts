@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       data: JSON.stringify(formData),
       status: status || 'Draft',
       submitted_by: profileId,
-      organization_id: request.headers.get('x-org-id') || session.profile.organizationId,
+      organization_id: session.profile.organizationId,
     }
 
     const { data, error } = await client

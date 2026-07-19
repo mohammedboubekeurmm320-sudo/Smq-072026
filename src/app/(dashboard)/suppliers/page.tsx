@@ -18,8 +18,9 @@ import { Separator } from '@/components/ui/separator'
 import {
   Plus, ArrowLeft, Search, ChevronLeft, ChevronRight,
   Truck, Star, ShieldCheck, ShieldAlert, ShieldX,
-  FileText, AlertTriangle, CheckCircle2, Loader2, Building2, Globe,
+  FileText, AlertTriangle, CheckCircle2, Loader2, Building2, Globe, BarChart3,
 } from 'lucide-react'
+import { SupplierScorecard } from '@/components/shared/SupplierScorecard'
 import type { SupplierStatus, SupplierCategory, QualificationMethod } from '@/types/qms'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -183,6 +184,7 @@ export default function SupplierView() {
             <TabsTrigger value="details">Détails</TabsTrigger>
             <TabsTrigger value="documents">Documents ({documents.length})</TabsTrigger>
             <TabsTrigger value="risk">Évaluation des risques</TabsTrigger>
+            <TabsTrigger value="scorecard" className="gap-1"><BarChart3 className="h-3.5 w-3.5" /> Scorecard</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="space-y-4 mt-4">
@@ -283,6 +285,23 @@ export default function SupplierView() {
                 ) : (
                   <p className="text-sm text-muted-foreground text-center py-4">Aucune évaluation des risques disponible pour ce fournisseur.</p>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Scorecard Tab */}
+          <TabsContent value="scorecard" className="mt-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Scorecard fournisseur</CardTitle></CardHeader>
+              <CardContent>
+                <SupplierScorecard
+                  qualityScore={selected.quality_score || 0}
+                  deliveryScore={selected.delivery_score || 0}
+                  priceScore={selected.price_score || 0}
+                  responsivenessScore={selected.responsiveness_score || 0}
+                  qualificationStatus={selected.status}
+                  lastAuditDate={selected.last_audit_date}
+                />
               </CardContent>
             </Card>
           </TabsContent>

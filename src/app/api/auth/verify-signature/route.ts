@@ -10,7 +10,18 @@ import { verifyPassword } from '@/lib/auth-server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const SIGNATURE_SECRET = process.env.SIGNATURE_SECRET || 'qms-esig-hmac-secret-key-2026'
+// SIGNATURE_SECRET est obligatoire — pas de fallback en dur
+function getSignatureSecret(): string {
+  const secret = process.env.SIGNATURE_SECRET
+  if (!secret) {
+    throw new Error(
+      '[CRITICAL] SIGNATURE_SECRET environment variable is not set. ' +
+      'Electronic signatures cannot function securely without it. ' +
+      'Generate one with: openssl rand -base64 48'
+    )
+  }
+  return secret
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,7 +64,7 @@ export async function POST(request: NextRequest) {
     const nonce = crypto.randomBytes(16).toString('hex')
     const payload = `${userId}:${recordId || 'system'}:${purpose}:${timestamp}:${nonce}`
     const hmacHash = crypto
-      .createHmac('sha256', SIGNATURE_SECRET)
+      .createHmac('sha256', getSignatureSecret())
       .update(payload)
       .digest('hex')
 

@@ -22,8 +22,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import {
   Plus, ArrowLeft, Search, Building2, Truck, ClipboardCheck,
   ChevronLeft, ChevronRight, AlertTriangle, FileWarning, Eye,
-  Calendar, User, Star, ShieldAlert, Save, X as XIcon, Loader2,
+  Calendar, User, Star, ShieldAlert, Save, X as XIcon, Loader2, ListChecks,
 } from 'lucide-react'
+import { AuditChecklist, type AuditChecklistItem } from '@/components/shared/AuditChecklist'
 import type { AuditType, AuditStatus, FindingSeverity, AuditFinding } from '@/types/qms'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ export default function AuditView() {
           <TabsList>
             <TabsTrigger value="details">Détails</TabsTrigger>
             <TabsTrigger value="findings">Constats ({findings.length})</TabsTrigger>
+            <TabsTrigger value="checklist" className="gap-1"><ListChecks className="h-3.5 w-3.5" /> Checklist</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="space-y-4 mt-4">
@@ -268,6 +270,37 @@ export default function AuditView() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* Checklist Tab */}
+          <TabsContent value="checklist" className="mt-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Checklist d&apos;audit</CardTitle></CardHeader>
+              <CardContent>
+                <AuditChecklist
+                  items={(() => {
+                    const raw = selected.checklist_items || []
+                    return raw.map((c: any, i: number) => ({
+                      id: c.id || `cl-${i}`,
+                      clause: c.clause || c.reference || `§${i + 1}`,
+                      requirement: c.requirement || c.description || 'Point de contrôle',
+                      status: c.status || 'pending',
+                      evidence: c.evidence,
+                      finding_severity: c.finding_severity,
+                    })) as AuditChecklistItem[]
+                  })()}
+                  onUpdate={(itemId, data) => {
+                    const items = [...(selected.checklist_items || [])]
+                    const idx = items.findIndex((c: any) => (c.id || `cl-${items.indexOf(c)}`) === itemId)
+                    if (idx >= 0) {
+                      items[idx] = { ...items[idx], ...data }
+                      update(selected.id, { checklist_items: JSON.stringify(items) })
+                    }
+                  }}
+                  disabled={selected.status === 'Closed' || selected.status === 'Completed'}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 

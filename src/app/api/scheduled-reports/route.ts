@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         last_run_at: null,
         next_run_at: new Date().toISOString(), // First run is immediate or next scheduled
         created_by: profileId,
-        organization_id: request.headers.get('x-org-id') || session.profile.organizationId,
+        organization_id: session.profile.organizationId,
       })
       .select()
       .single()

@@ -1,14 +1,12 @@
 // ============================================================
-// Auth server helpers: password hashing + session parsing
-// Compatible avec le nouveau système de cookie base64 JSON
+// Auth server helpers: password hashing + JWT session parsing
 // ============================================================
 
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
 import type { UserRole, Permission } from '@/types/qms'
 import { rolePermissions } from '@/types/qms'
-
-// ---- Password helpers (utilisés par signup, profiles) ----
+import { verifySession } from '@/lib/session'
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10)
@@ -18,27 +16,10 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   try { return bcrypt.compare(password, hash) } catch { return false }
 }
 
-// ---- Session parsing (lit le cookie "session" base64 JSON) ----
-
 const SESSION_COOKIE = 'session'
 
-interface SessionPayload {
-  sub: string
-  email: string
-  name: string
-  organizationId: string
-  role: string
-  exp: number
-}
-
 export interface ServerSession {
-  profile: {
-    id: string
-    email: string
-    fullName: string
-    role: UserRole
-    organizationId: string
-  }
+  profile: { id: string; email: string; fullName: string; role: UserRole; organizationId: string }
 }
 
 export async function getServerSession(): Promise<ServerSession | null> {
@@ -47,12 +28,8 @@ export async function getServerSession(): Promise<ServerSession | null> {
     const raw = cookieStore.get(SESSION_COOKIE)?.value
     if (!raw) return null
 
-    const payload: SessionPayload = JSON.parse(
-      Buffer.from(raw, 'base64').toString()
-    )
-
-    // Vérifier l'expiration
-    if (payload.exp && Date.now() > payload.exp) return null
+    const payload = await verifySession(raw)
+    if (!payload) return null
 
     return {
       profile: {
@@ -67,8 +44,6 @@ export async function getServerSession(): Promise<ServerSession | null> {
     return null
   }
 }
-
-// ---- Permission helpers ----
 
 export function hasPermission(role: UserRole, perm: Permission): boolean {
   return (rolePermissions[role] || []).includes(perm)

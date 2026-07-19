@@ -21,7 +21,7 @@ import { Progress } from '@/components/ui/progress'
 import {
   Plus, ArrowLeft, Search, ChevronLeft, ChevronRight,
   GraduationCap, Clock, AlertTriangle, CheckCircle2,
-  Upload, Users, Loader2, ChevronRight,
+  Upload, Users, Loader2,
 } from 'lucide-react'
 import type { TrainingType, TrainingStatus, DeliveryMethod, TrainingCategory, getEffectiveTrainingStatus } from '@/types/qms'
 

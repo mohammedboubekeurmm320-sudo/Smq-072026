@@ -1,9 +1,10 @@
 // ============================================================
-// LOGIN API: Custom auth avec bcrypt + base64 session cookie
+// LOGIN API: Custom auth avec bcrypt + JWT signed session cookie
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { signSession } from '@/lib/session'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -43,7 +44,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Vérifier le mot de passe (bcrypt)
-    // Prérequis: npm install bcryptjs @types/bcryptjs
     const bcrypt = await import('bcryptjs')
     const valid = await bcrypt.compare(password, profile.password_hash)
     if (!valid) {
@@ -62,21 +62,27 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .single()
 
-    // Créer le payload de session
-    const sessionPayload = {
+    // Créer la session en base pour permettre la révocation
+    const { data: sessionRow } = await supabase
+      .from('sessions')
+      .insert({
+        profile_id: profile.id,
+        user_agent: request.headers.get('user-agent') || null,
+        ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select('id')
+      .single()
+
+    // Signer le JWT avec sid pour révocation
+    const sessionToken = await signSession({
       sub: profile.id,
       email: profile.email,
       name: profile.full_name,
       organizationId: membership?.organization_id || profile.organization_id,
       role: membership?.role || 'member',
-      // Expire dans 24h
-      exp: Date.now() + 24 * 60 * 60 * 1000,
-    }
-
-    // Encoder en base64
-    const sessionToken = Buffer.from(
-      JSON.stringify(sessionPayload)
-    ).toString('base64')
+      sid: sessionRow?.id,
+    })
 
     // Mettre à jour last_login
     await supabase
@@ -84,15 +90,7 @@ export async function POST(request: NextRequest) {
       .update({ last_login_at: new Date().toISOString() })
       .eq('id', profile.id)
 
-    // Créer la session DB
-    await supabase.from('sessions').insert({
-      profile_id: profile.id,
-      user_agent: request.headers.get('user-agent') || null,
-      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
-
-    // Réponse avec cookie httpOnly
+    // Réponse avec cookie httpOnly (JWT signé)
     const response = NextResponse.json({
       success: true,
       user: {
@@ -111,16 +109,6 @@ export async function POST(request: NextRequest) {
       path: '/',
       maxAge: 60 * 60 * 24,
     })
-
-    if (membership?.organization_id) {
-      response.cookies.set('current_org_id', membership.organization_id, {
-        httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 365,
-      })
-    }
 
     return response
   } catch (err) {

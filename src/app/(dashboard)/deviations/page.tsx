@@ -19,9 +19,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Separator } from '@/components/ui/separator'
 import {
   Plus, Search, ChevronRight, ArrowLeftRight, AlertTriangle,
-  CheckCircle, Clock, Link2, ShieldAlert, FileText,
+  CheckCircle, Clock, Link2, ShieldAlert, FileText, Beaker,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RootCauseAnalysis } from '@/components/shared/RootCauseAnalysis'
+import { ProductStageTracker } from '@/components/shared/ProductStageTracker'
 import type { DeviationType, DeviationCategory, DeviationStatus, ProductStage } from '@/types/qms'
 
 const TYPE_LABELS: Record<DeviationType, string> = { Planned: 'Planifiée', Unplanned: 'Non planifiée' }
@@ -214,13 +217,23 @@ export default function DeviationView() {
                 </SheetTitle>
               </SheetHeader>
               <div className="mt-6 space-y-4">
+                <Tabs defaultValue="overview">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="overview" className="flex-1">Vue d&apos;ensemble</TabsTrigger>
+                    <TabsTrigger value="rca" className="flex-1 gap-1"><Beaker className="h-3.5 w-3.5" /> Cause racine</TabsTrigger>
+                    <TabsTrigger value="workflow" className="flex-1">Workflow</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="overview" className="mt-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div><Label className="text-muted-foreground">Catégorie</Label><p className="text-sm font-medium mt-1">{CATEGORY_LABELS[selected.category as DeviationCategory] || selected.category}</p></div>
-                  <div><Label className="text-muted-foreground">Étape produit</Label><p className="text-sm mt-1">{STAGE_LABELS[selected.product_stage as ProductStage] || selected.product_stage || '—'}</p></div>
                   <div><Label className="text-muted-foreground">Statut</Label><div className="mt-1"><Badge variant="outline" className={getStatusColor(selected.status)}>{selected.status}</Badge></div></div>
                   <div><Label className="text-muted-foreground">Produit / Lot</Label><p className="text-sm mt-1">{selected.product_name || '—'} {selected.lot_number ? `— ${selected.lot_number}` : ''}</p></div>
                 </div>
                 {selected.description && <div><Label className="text-muted-foreground">Description</Label><p className="text-sm mt-1 whitespace-pre-wrap">{selected.description}</p></div>}
+
+                {/* Product Stage Tracker */}
+                <ProductStageTracker currentStage={selected.product_stage} disabled />
 
                 {/* Impact Assessment */}
                 <div className="p-4 border rounded-lg bg-muted/30">
@@ -238,8 +251,25 @@ export default function DeviationView() {
                     <span className="text-sm">CAPA requise : <span className="font-mono font-medium">{selected.capa_id}</span></span>
                   </div>
                 )}
+                  </TabsContent>
 
-                <Separator />
+                  {/* Root Cause Analysis Tab */}
+                  <TabsContent value="rca" className="mt-4">
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg mb-4">
+                      <p className="text-sm text-amber-800 dark:text-amber-300">
+                        Utilisez les outils d&apos;analyse de cause racine ci-dessous pour investiguer la déviation.
+                        Choisissez entre la méthode 5 Pourquoi, le diagramme Ishikawa 6M ou une analyse libre.
+                      </p>
+                    </div>
+                    <RootCauseAnalysis
+                      value={selected.root_cause || selected.rootCause || ''}
+                      onChange={(val) => update(selected.id, { root_cause: val })}
+                      disabled={selected.status === 'Closed' || selected.status === 'Approved'}
+                    />
+                  </TabsContent>
+
+                  {/* Workflow Tab */}
+                  <TabsContent value="workflow" className="mt-4">
                 <div>
                   <Label className="text-muted-foreground text-xs uppercase tracking-wider">Workflow</Label>
                   <div className="mt-3 flex items-center gap-1 flex-wrap">
@@ -256,13 +286,15 @@ export default function DeviationView() {
                     ))}
                   </div>
                 </div>
-                <Separator />
+                <Separator className="my-4" />
                 <div className="flex gap-2 flex-wrap">
                   {selected.status === 'Open' && <Button size="sm" onClick={() => requestTransition(selected.id, 'Under Investigation')}><Search className="h-4 w-4 mr-2" /> Investiguer</Button>}
                   {selected.status === 'Under Investigation' && <Button size="sm" onClick={() => requestTransition(selected.id, 'Pending QA Review')}><ShieldAlert className="h-4 w-4 mr-2" /> Soumettre revue QA</Button>}
                   {selected.status === 'Pending QA Review' && <Button size="sm" onClick={() => requestTransition(selected.id, 'Approved')}><CheckCircle className="h-4 w-4 mr-2" /> Approuver</Button>}
                   {selected.status === 'Approved' && <Button size="sm" onClick={() => requestTransition(selected.id, 'Closed')}><CheckCircle className="h-4 w-4 mr-2" /> Clôturer</Button>}
                 </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             </>
           )}

@@ -19,8 +19,9 @@ import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import {
   Plus, ArrowLeft, Search, ChevronLeft, ChevronRight,
-  AlertTriangle, Shield, ShieldAlert, Loader2, Save,
+  AlertTriangle, Shield, ShieldAlert, Loader2, Save, ExternalLink,
 } from 'lucide-react'
+import { FmeaRiskMatrix } from '@/components/shared/FmeaRiskMatrix'
 import type {
   RiskStatus, RiskLevel, RiskCategory, RiskAcceptability,
   ControlType, calcRpn, rpnToLevel,
@@ -302,6 +303,14 @@ export default function RiskView() {
                 <Separator />
                 <div className="flex justify-between"><span className="text-muted-foreground">Catégorie</span><span className="font-medium">{selected.risk_category || '—'}</span></div>
                 <Separator />
+                <div className="flex justify-between"><span className="text-muted-foreground">Type de contrôle</span><span className="font-medium">{CONTROL_TYPE_LABELS[selected.control_type as ControlType] || selected.control_type || '—'}</span></div>
+                <Separator />
+                <div className="flex justify-between"><span className="text-muted-foreground">Acceptabilité</span><Badge variant="outline" className={ACCEPTABILITY_STYLES[selected.risk_acceptability as RiskAcceptability] || ''}>{selected.risk_acceptability || '—'}</Badge></div>
+                {selected.risk_owner && <><Separator /><div className="flex justify-between"><span className="text-muted-foreground">Propriétaire</span><span className="font-medium">{selected.risk_owner}</span></div></>}
+                {selected.regulatory_reference && <><Separator /><div className="flex justify-between"><span className="text-muted-foreground">Référence réglementaire</span><span className="font-medium text-xs">{selected.regulatory_reference}</span></div></>}
+                {selected.verification_method && <><Separator /><div className="flex justify-between"><span className="text-muted-foreground">Méthode de vérification</span><span className="font-medium">{selected.verification_method}</span></div></>}
+                {selected.linked_capa_id && <><Separator /><div className="flex justify-between items-center"><span className="text-muted-foreground">CAPA liée</span><Badge variant="outline" className="cursor-pointer hover:underline" onClick={() => router.push(`/qms/capas/${selected.linked_capa_id}`)}><ExternalLink className="w-3 h-3 mr-1" />{selected.linked_capa_id.slice(0, 12)}...</Badge></div></>}
+                <Separator />
                 <div className="grid grid-cols-3 gap-4 mt-4">
                   <div className="text-center">
                     <Label className="text-xs text-muted-foreground">Sévérité initiale</Label>
@@ -434,7 +443,12 @@ export default function RiskView() {
 
           {/* Matrix Tab */}
           <TabsContent value="matrix" className="mt-4">
-            <RiskMatrixHeatmap />
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Matrice FMEA (Sévérité × Probabilité)</CardTitle></CardHeader>
+              <CardContent>
+                <FmeaRiskMatrix severity={initialS} probability={initialP} />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 

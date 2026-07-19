@@ -17,8 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
-import { AlertTriangle, Plus, Search, ChevronRight, AlertOctagon, Zap, ShieldAlert, Link2 } from 'lucide-react'
+import { AlertTriangle, Plus, Search, ChevronRight, AlertOctagon, Zap, ShieldAlert, Link2, Beaker } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { EightDPanel, type Discipline } from '@/components/shared/EightDPanel'
 import type { NcrType, NcrSeverity, NcrStatus, NcrDisposition } from '@/types/qms'
 
 const NCR_TYPE_LABELS: Record<NcrType, string> = {
@@ -210,6 +212,14 @@ export default function NcrView() {
                 </SheetTitle>
               </SheetHeader>
               <div className="mt-6 space-y-4">
+                <Tabs defaultValue="overview">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="overview" className="flex-1">Vue d&apos;ensemble</TabsTrigger>
+                    <TabsTrigger value="eightd" className="flex-1 gap-1"><Beaker className="h-3.5 w-3.5" /> Méthodologie 8D</TabsTrigger>
+                    <TabsTrigger value="workflow" className="flex-1">Workflow</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="overview" className="mt-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div><Label className="text-muted-foreground">Type</Label><p className="text-sm font-medium mt-1">{NCR_TYPE_LABELS[selected.ncr_type] || selected.ncr_type}</p></div>
                   <div><Label className="text-muted-foreground">Sévérité</Label><p className="mt-1"><Badge variant="outline" className={`border ${SEVERITY_CONFIG[selected.severity as NcrSeverity]?.bg} ${SEVERITY_CONFIG[selected.severity as NcrSeverity]?.color}`}>{SEVERITY_CONFIG[selected.severity as NcrSeverity]?.label || selected.severity}</Badge></p></div>
@@ -246,8 +256,28 @@ export default function NcrView() {
                     <span className="text-sm text-red-700 dark:text-red-400 font-medium">Escalade requise — NCR critique nécessitant une action immédiate de la direction</span>
                   </div>
                 )}
+                  </TabsContent>
 
-                <Separator />
+                  {/* 8D Tab */}
+                  <TabsContent value="eightd" className="mt-4">
+                    <EightDPanel
+                      ncrId={selected.id}
+                      disciplines={selected.eight_d_data as Discipline[] || undefined}
+                      onUpdate={(discNum, data) => {
+                        const existing = (selected.eight_d_data as Discipline[] | undefined) || []
+                        const updated = [...existing]
+                        const idx = updated.findIndex(d => d.discipline === discNum)
+                        if (idx >= 0) {
+                          updated[idx] = { ...updated[idx], ...data }
+                        }
+                        update(selected.id, { eight_d_data: JSON.stringify(updated) })
+                      }}
+                      disabled={selected.status === 'Closed'}
+                    />
+                  </TabsContent>
+
+                  {/* Workflow Tab */}
+                  <TabsContent value="workflow" className="mt-4">
                 <div>
                   <Label className="text-muted-foreground text-xs uppercase tracking-wider">Workflow</Label>
                   <div className="mt-3 flex items-center gap-1 flex-wrap">
@@ -264,6 +294,8 @@ export default function NcrView() {
                     ))}
                   </div>
                 </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             </>
           )}

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { hashPassword } from '@/lib/auth-server'
+import { signSession } from '@/lib/session'
 import { INDUSTRY_CONFIG, STANDARDS_BY_INDUSTRY, type IndustryType } from '@/types/qms'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -82,16 +83,26 @@ export async function POST(req: NextRequest) {
       status: 'active',
     })
 
-    // Créer le cookie de session
-    const sessionPayload = {
+    // Créer la session en base pour révocation
+    const { data: sessionRow } = await supabase
+      .from('sessions')
+      .insert({
+        profile_id: profile.id,
+        user_agent: req.headers.get('user-agent') || null,
+        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select('id')
+      .single()
+
+    const sessionToken = await signSession({
       sub: profile.id,
       email: profile.email,
       name: profile.full_name,
       organizationId: org.id,
       role: 'admin',
-      exp: Date.now() + 24 * 60 * 60 * 1000,
-    }
-    const sessionToken = Buffer.from(JSON.stringify(sessionPayload)).toString('base64')
+      sid: sessionRow?.id,
+    })
 
     // Seed system record types
     await seedSystemRecordTypes(supabase, org.id, profile.id)

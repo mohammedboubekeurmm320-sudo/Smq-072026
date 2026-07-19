@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       const batch = rows.slice(i, i + BATCH_SIZE)
 
       // Add organization_id and created_by to each record
-      const orgId = request.headers.get('x-org-id') || session.profile.organizationId
+      const orgId = session.profile.organizationId
       const records = batch.map(row => ({
         ...row,
         organization_id: orgId,

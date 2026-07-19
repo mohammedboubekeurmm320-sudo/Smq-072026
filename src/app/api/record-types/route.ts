@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       is_system: false,
       fields: fields ? JSON.stringify(fields) : null,
       status_flow: statusFlow ? JSON.stringify(statusFlow) : null,
-      organization_id: request.headers.get('x-org-id') || session.profile.organizationId,
+      organization_id: session.profile.organizationId,
       created_by: profileId,
     }
 

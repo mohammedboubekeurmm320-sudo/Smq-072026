@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
         table_name: entityType,
         is_system: false,
         fields: JSON.stringify([fieldDef]),
-        organization_id: request.headers.get('x-org-id') || session.profile.organizationId,
+        organization_id: session.profile.organizationId,
         created_by: profileId,
       })
       .select()
