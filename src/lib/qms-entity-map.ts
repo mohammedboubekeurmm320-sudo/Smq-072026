@@ -88,9 +88,9 @@ export const QMS_ENTITIES: Record<string, QmsEntityConfig> = {
     specializedRoute: '/documents',
   },
   'oos-oot': {
-    slug: 'oos-oot', table: 'oos_oot', label: 'OOS/OOT', labelPlural: 'OOS/OOT',
+    slug: 'oos-oot', table: 'non_conformances', label: 'OOS/OOT', labelPlural: 'OOS/OOT',
     icon: 'FileQuestion', description: 'Résultats hors spécification (§8.2.6)',
-    numberField: 'oosNumber', numberPrefix: 'OOS', statusField: 'status',
+    numberField: 'ncrNumber', numberPrefix: 'OOS', statusField: 'status',
     defaultSort: 'createdAt', color: 'text-red-600',
     specializedRoute: '/oos-oot',
   },

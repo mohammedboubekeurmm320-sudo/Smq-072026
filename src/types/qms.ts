@@ -390,6 +390,24 @@ export interface ComplianceRef {
 // Audit trail
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT' | 'SIGN' | 'LOGIN' | 'EXPORT';
 
+export type NotificationType = 'info' | 'warning' | 'error' | 'success' | 'capa_overdue' | 'ncr_overdue' | 'document_expiry' | 'training_overdue' | 'audit_due';
+
+export interface Notification {
+  id: string;
+  organizationId: string;
+  userId?: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  entityType?: string;
+  entityId?: string;
+  isRead: boolean;
+  link?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuditTrailEntry {
   id: string;
   sequenceNumber?: number;

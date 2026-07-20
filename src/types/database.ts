@@ -1657,6 +1657,53 @@ export type Database = {
           updated_at?: string
         }
       }
+      notifications: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string | null
+          title: string
+          message: string
+          type: string
+          entity_type: string | null
+          entity_id: string | null
+          is_read: boolean
+          link: string | null
+          metadata: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id?: string | null
+          title: string
+          message: string
+          type?: string
+          entity_type?: string | null
+          entity_id?: string | null
+          is_read?: boolean
+          link?: string | null
+          metadata?: any
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string | null
+          title?: string
+          message?: string
+          type?: string
+          entity_type?: string | null
+          entity_id?: string | null
+          is_read?: boolean
+          link?: string | null
+          metadata?: any
+          created_at?: string
+          updated_at?: string
+        }
+      }
       audit_config: {
         Row: {
           id: string
@@ -1679,7 +1726,45 @@ export type Database = {
       }
     }
     Views: {
-      [key: string]: never
+      v_org_dashboard: {
+        Row: {
+          organization_id: string
+          organization_name: string
+          total_documents: number
+          approved_documents: number
+          under_review_documents: number
+          draft_documents: number
+          obsolete_documents: number
+          total_capas: number
+          open_capas: number
+          closed_capas: number
+          overdue_capas: number
+          total_ncrs: number
+          open_ncrs: number
+          closed_ncrs: number
+          total_deviations: number
+          open_deviations: number
+          total_change_controls: number
+          open_change_controls: number
+          total_audits: number
+          completed_audits: number
+          planned_audits: number
+          total_training: number
+          completed_training: number
+          overdue_training: number
+          total_risks: number
+          open_risks: number
+          total_batch_records: number
+          released_batch_records: number
+          total_suppliers: number
+          qualified_suppliers: number
+          total_form_templates: number
+          approved_form_templates: number
+          unread_notifications: number
+        }
+        Insert: never
+        Update: never
+      }
     }
     Functions: {
       [key: string]: never

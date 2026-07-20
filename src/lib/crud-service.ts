@@ -5,6 +5,8 @@
 // ============================================================
 
 import { getAuthenticatedClient, ORG_SCOPED_ENTITIES } from '@/lib/supabase/server-with-context'
+import { checkDocumentPrerequisite, PREREQUISITE_GATED_ENTITIES } from '@/lib/document-prerequisite-guard'
+import { sanitizeObject } from '@/lib/sanitize'
 import type { Request } from 'next/server'
 
 export type CrudEntity =
@@ -59,14 +61,25 @@ export async function create<T = any>(request: Request, entity: CrudEntity, body
   const { client, profileId, organizationId, error } = await getAuthenticatedClient(request)
   if (error || !client || !organizationId) return { data: null, error }
 
+  // --- Garde-fou prérequis documentaires (ISO 13485 §4.2.4) ---
+  if (PREREQUISITE_GATED_ENTITIES.has(entity)) {
+    const prereqCheck = await checkDocumentPrerequisite(client, organizationId, entity)
+    if (!prereqCheck.allowed) {
+      return { data: null, error: prereqCheck.reason }
+    }
+  }
+
+  // --- Sanitisation XSS des entrées texte ---
+  const sanitizedBody = await sanitizeObject(body)
+
   // FORCER organization_id depuis le serveur — ignorer toute valeur client
-  if (ORG_SCOPED_ENTITIES.has(entity)) body.organization_id = organizationId
-  else delete body.organization_id
+  if (ORG_SCOPED_ENTITIES.has(entity)) sanitizedBody.organization_id = organizationId
+  else delete sanitizedBody.organization_id
 
-  const tablesWithCreator = ['documents', 'form_templates', 'form_instances', 'capas', 'non_conformances', 'deviations', 'change_controls', 'audits', 'training', 'risks', 'suppliers', 'batch_records', 'scheduled_reports']
-  if (tablesWithCreator.includes(entity) && profileId) body.created_by = profileId
+  const tablesWithCreator = ['documents', 'form_templates', 'form_instances', 'capas', 'non_conformances', 'deviations', 'change_controls', 'audits', 'training', 'risks', 'suppliers', 'batch_records', 'scheduled_reports', 'notifications']
+  if (tablesWithCreator.includes(entity) && profileId) sanitizedBody.created_by = profileId
 
-  const { data, error: qError } = await client.from(entity).insert(body).select().single()
+  const { data, error: qError } = await client.from(entity).insert(sanitizedBody).select().single()
   return { data: data as T, error: qError?.message }
 }
 
