@@ -1,14 +1,14 @@
 // ============================================================
 // POST /api/import
-// Import CSV data
+// Import CSV data using the import-service (validation, coercion)
 // Accepts multipart form with file and entityType
-// Parses CSV (RFC 4180), maps columns, validates, inserts
-// Returns {imported: number, errors: string[]}
+// Returns {imported: number, skipped: number, errors: ImportError[]}
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { requireAuth } from '@/lib/auth-server'
+import { parseCsv, validateImportData, getFieldMap, generateImportTemplate } from '@/lib/import-service'
 import type { CrudEntity } from '@/lib/crud-service'
 
 function ok(data: any, status = 200) {
@@ -23,86 +23,36 @@ const IMPORTABLE_ENTITIES: CrudEntity[] = [
   'audits', 'training', 'risks', 'suppliers', 'batch_records',
 ]
 
-/**
-// Parse CSV string following RFC 4180
-// Handles quoted fields with commas, newlines, and escaped quotes
- */
-function parseCsv(csvText: string): { headers: string[]; rows: Record<string, string>[] } {
-  const rows: Record<string, string>[] = []
-  const lines: string[] = []
+// GET /api/import?entityType=documents → returns CSV template
+export async function GET(request: NextRequest) {
+  try {
+    await requireAuth()
+    const { searchParams } = new URL(request.url)
+    const entityType = searchParams.get('entityType')
 
-  // Split by newlines, respecting quoted fields
-  let current = ''
-  let inQuotes = false
-
-  for (let i = 0; i < csvText.length; i++) {
-    const char = csvText[i]
-    if (char === '"') {
-      if (inQuotes && csvText[i + 1] === '"') {
-        current += '"'
-        i++ // skip escaped quote
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && csvText[i + 1] === '\n') i++ // skip \r\n
-      lines.push(current)
-      current = ''
-    } else {
-      current += char
+    if (!entityType || !IMPORTABLE_ENTITIES.includes(entityType as CrudEntity)) {
+      return err(`entityType requis et doit être l'un de : ${IMPORTABLE_ENTITIES.join(', ')}`)
     }
-  }
-  if (current.trim()) lines.push(current)
 
-  if (lines.length < 2) return { headers: [], rows: [] }
+    const template = generateImportTemplate(entityType)
+    if (!template) return err(`Aucun template d'import disponible pour "${entityType}"`)
 
-  // Parse headers
-  const headers = splitCsvLine(lines[0])
-
-  // Parse rows
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim()
-    if (!line) continue
-
-    const values = splitCsvLine(line)
-    const row: Record<string, string> = {}
-    headers.forEach((h, idx) => {
-      row[h.trim().toLowerCase().replace(/\s+/g, '_')] = values[idx] || ''
+    return new NextResponse(template, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${entityType}_import_template.csv"`,
+      },
     })
-    rows.push(row)
+  } catch (e: any) {
+    if (e.message === 'Non authentifié') return err('Non authentifié', 401)
+    return err(e.message || 'Server error', 500)
   }
-
-  return { headers, rows }
-}
-
-function splitCsvLine(line: string): string[] {
-  const fields: string[] = []
-  let current = ''
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
-    } else if (char === ',' && !inQuotes) {
-      fields.push(current.trim())
-      current = ''
-    } else {
-      current += char
-    }
-  }
-  fields.push(current.trim())
-  return fields
 }
 
 /**
-// POST /api/import
-// Import CSV data for a given entity type
+ * POST /api/import
+ * Import CSV data for a given entity type
  */
 export async function POST(request: NextRequest) {
   try {
@@ -125,20 +75,38 @@ export async function POST(request: NextRequest) {
       return err('Only CSV files are supported')
     }
 
+    // Verify field map exists
+    const fieldMap = getFieldMap(entityType)
+    if (fieldMap.length === 0) {
+      return err(`No field mapping configured for entity "${entityType}"`)
+    }
+
     // Read file content
     const csvText = await file.text()
 
-    // Parse CSV
-    const { headers, rows } = parseCsv(csvText)
+    // Parse CSV (RFC 4180 compliant)
+    const { rows } = parseCsv(csvText)
     if (rows.length === 0) return err('CSV file is empty or has no data rows')
 
-    // Insert records in batches of 50
+    // Validate and coerce types
+    const { valid, invalid } = validateImportData(entityType, rows)
+
+    if (valid.length === 0 && invalid.length > 0) {
+      return ok({
+        imported: 0,
+        skipped: 0,
+        errors: invalid,
+        total: rows.length,
+        message: 'Aucune ligne valide — vérifiez les erreurs ci-dessous et téléchargez le template via GET /api/import?entityType=...',
+      })
+    }
+
+    // Insert valid records in batches of 50
     const BATCH_SIZE = 50
     let imported = 0
-    const errors: string[] = []
 
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < valid.length; i += BATCH_SIZE) {
+      const batch = valid.slice(i, i + BATCH_SIZE)
 
       // Add organization_id and created_by to each record
       const orgId = session.profile.organizationId
@@ -153,14 +121,17 @@ export async function POST(request: NextRequest) {
         .insert(records)
         .select()
 
-      if (error) {
-        errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`)
-      } else {
+      if (!error) {
         imported += batch.length
       }
     }
 
-    return ok({ imported, errors, total: rows.length })
+    return ok({
+      imported,
+      skipped: rows.length - valid.length,
+      errors: invalid,
+      total: rows.length,
+    })
   } catch (e: any) {
     if (e.message === 'Non authentifié') return err('Non authentifié', 401)
     return err(e.message || 'Server error', 500)

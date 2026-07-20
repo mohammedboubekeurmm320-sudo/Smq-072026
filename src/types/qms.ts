@@ -156,9 +156,14 @@ export const STANDARDS_BY_INDUSTRY: Record<IndustryType, string[]> = {
 
 // Document types
 export type DocumentType =
+  // Qwen français (13)
   | 'MANUEL' | 'POLITIQUE' | 'INDICATEUR' | 'PROCESS_MAP' | 'ORGANIGRAMME' | 'REGLEMENTAIRE'
   | 'MAPPING' | 'PROCEDURE' | 'INSTRUCTION' | 'FORMULAIRE' | 'REGISTRE' | 'ENREGISTREMENT'
-  | 'MASTER_BATCH' | 'SOP' | 'WI' | 'Form' | 'Policy' | 'Specification';
+  | 'MASTER_BATCH'
+  // Legacy anglais (14)
+  | 'SOP' | 'WI' | 'Form' | 'Policy' | 'Specification' | 'Technical'
+  | 'Risk_Analysis' | 'Validation_Protocol' | 'Record' | 'Manual'
+  | 'Instruction' | 'Register' | 'Process_Map' | 'Organigram';
 
 export type DocumentStatus = 'Draft' | 'Under Review' | 'Approved' | 'Effective' | 'Obsolete' | 'Withdrawn';
 export type DocumentClassification = 'Internal' | 'External' | 'Regulatory' | 'Confidential';
