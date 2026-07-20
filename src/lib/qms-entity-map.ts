@@ -139,6 +139,7 @@ export const SIDEBAR_NAV: NavGroup[] = [
       { slug: 'change-controls', label: 'Contrôles Changement', icon: 'ArrowLeftRight', specialized: true },
       { slug: 'audits', label: 'Audits', icon: 'ClipboardCheck', specialized: true },
       { slug: 'documents', label: 'Documents', icon: 'FileText', specialized: true },
+      { slug: 'document-hierarchy', label: 'Hiérarchie Doc.', icon: 'Network', specialized: true },
     ],
   },
   {

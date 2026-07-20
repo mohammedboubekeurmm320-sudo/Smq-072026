@@ -1765,6 +1765,26 @@ export type Database = {
         Insert: never
         Update: never
       }
+      // Document hierarchy recursive view (multi-tenant)
+      document_hierarchy: {
+        Row: {
+          id: string
+          organization_id: string
+          document_number: string | null
+          title: string
+          doc_type: string | null
+          status: string
+          level: number | null
+          parent_document_id: string | null
+          department_code: string | null
+          iso_clause: string | null
+          depth: number
+          path_ids: string[]
+          path_numbers: (string | null)[]
+        }
+        Insert: never
+        Update: never
+      }
     }
     Functions: {
       [key: string]: never
