@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import {
   ChevronRight, ChevronDown, FolderOpen, FolderClosed,
-  FileText, Search, Expand, ShrinkPlus, Link2, Unlink,
+  FileText, Search, Expand, Shrink, Link2, Unlink,
 } from 'lucide-react'
 
 const LEVEL_COLORS: Record<number, { bg: string; border: string; text: string; dot: string }> = {
@@ -195,7 +195,7 @@ export default function DocumentHierarchyView() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={expandAll}><Expand className="w-4 h-4 mr-1" /> Tout developper</Button>
-          <Button variant="outline" size="sm" onClick={collapseAll}><ShrinkPlus className="w-4 h-4 mr-1" /> Tout reduire</Button>
+          <Button variant="outline" size="sm" onClick={collapseAll}><Shrink className="w-4 h-4 mr-1" /> Tout reduire</Button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
