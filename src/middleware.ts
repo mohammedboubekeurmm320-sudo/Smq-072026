@@ -63,7 +63,15 @@ export async function middleware(request: NextRequest) {
           loginUrl.searchParams.set('redirect', pathname)
           return NextResponse.redirect(loginUrl)
         }
-      } catch { /* fail-open for availability */ }
+      } catch (err) {
+        // 21 CFR Part 11 §11.10 — fail-closed : en cas d'indisponibilité,
+        // l'accès est refusé plutôt que toléré.
+        console.error('[middleware] session revocation check failed — denying access:', err instanceof Error ? err.message : err)
+        if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Session verification failed' }, { status: 401 })
+        const loginUrl = new URL('/login', request.url)
+        loginUrl.searchParams.set('redirect', pathname)
+        return NextResponse.redirect(loginUrl)
+      }
     }
   }
 

@@ -21,7 +21,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Separator } from '@/components/ui/separator'
 import {
   Plus, FileText, CheckCircle, Archive, Copy, Search,
-  FileStack, ArrowRight, ChevronRight, Clock,
+  FileStack, ArrowRight, ChevronRight, Clock, AlertTriangle, ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import type { DocumentType, DocumentStatus, DocumentLevel } from '@/types/qms'
@@ -98,13 +98,19 @@ export default function DocumentControlView() {
     }
   }
 
+  const [workflowError, setWorkflowError] = useState<string | null>(null)
+
   const doTransition = async (id: string, newStatus: string) => {
     try {
+      setWorkflowError(null)
       const m = (await import('@/lib/api-client')).api
       await m.module('/documents').transition(id, newStatus)
       refetch()
       setSheetOpen(false)
-    } catch (e: any) { alert(e.message) }
+    } catch (e: any) {
+      const msg = e?.message || e?.toString?.() || 'Erreur lors de la transition'
+      setWorkflowError(msg)
+    }
   }
 
   const handleEsigConfirm = (password: string, hash: string) => {
@@ -146,8 +152,11 @@ export default function DocumentControlView() {
         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
           {r.status === 'Under Review' && (
             <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 hover:text-green-700"
-              onClick={() => requestTransition(r.id, 'Approved')}>
-              <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approuver
+              onClick={() => requestTransition(r.id, 'Approved')}
+              disabled={!!(user?.id && (r.author_id === user.id || r.created_by === user.id))}
+              title={user?.id && (r.author_id === user.id || r.created_by === user.id) ? 'Séparation des tâches : l\'auteur ne peut pas approuver son propre document' : undefined}
+            >
+              <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Approuver
             </Button>
           )}
           {r.status === 'Effective' && (
@@ -312,8 +321,19 @@ export default function DocumentControlView() {
                 </div>
                 <Separator />
                 <div className="flex gap-2 flex-wrap">
-                  {selectedDoc.status === 'Under Review' && (
-                    <Button size="sm" onClick={() => requestTransition(selectedDoc.id, 'Approved')}><CheckCircle className="h-4 w-4 mr-2" /> Approuver</Button>
+                  {workflowError && (
+                  <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                    <p className="text-sm text-destructive">{workflowError}</p>
+                  </div>
+                )}
+                {selectedDoc.status === 'Under Review' && (
+                    <Button size="sm" onClick={() => requestTransition(selectedDoc.id, 'Approved')}
+                      disabled={!!(user?.id && (selectedDoc.author_id === user.id || selectedDoc.created_by === user.id))}
+                      title={user?.id && (selectedDoc.author_id === user.id || selectedDoc.created_by === user.id) ? 'Séparation des tâches : l\'auteur ne peut pas approuver son propre document' : undefined}
+                    >
+                      <ShieldCheck className="h-4 w-4 mr-2" /> Approuver
+                    </Button>
                   )}
                   {selectedDoc.status === 'Effective' && (
                     <Button size="sm" variant="outline" onClick={() => requestTransition(selectedDoc.id, 'Obsolete')}><Archive className="h-4 w-4 mr-2" /> Archiver</Button>

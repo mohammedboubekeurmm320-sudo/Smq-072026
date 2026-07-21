@@ -6,6 +6,7 @@
 
 import { getAuthenticatedClient, ORG_SCOPED_ENTITIES } from '@/lib/supabase/server-with-context'
 import { checkDocumentPrerequisite, PREREQUISITE_GATED_ENTITIES } from '@/lib/document-prerequisite-guard'
+import { checkDocumentStatusTransition } from '@/lib/document-workflow-guard'
 import { sanitizeObject } from '@/lib/sanitize'
 import type { Request } from 'next/server'
 
@@ -84,8 +85,27 @@ export async function create<T = any>(request: Request, entity: CrudEntity, body
 }
 
 export async function update<T = any>(request: Request, entity: CrudEntity, id: string, body: Record<string, any>) {
-  const { client, organizationId, error } = await getAuthenticatedClient(request)
+  const { client, profileId, organizationId, error } = await getAuthenticatedClient(request)
   if (error || !client || !organizationId) return { data: null, error }
+
+  // --- Garde-fou workflow documentaire (séparation des tâches, 21 CFR Part 11) ---
+  if (entity === 'documents' && body.status && profileId) {
+    const { data: currentDoc } = await client
+      .from('documents')
+      .select('status, author_id, created_by')
+      .eq('id', id)
+      .single()
+
+    if (currentDoc && body.status !== currentDoc.status) {
+      const workflowCheck = await checkDocumentStatusTransition(
+        client, organizationId, id,
+        currentDoc.status, body.status, profileId,
+      )
+      if (!workflowCheck.allowed) {
+        return { data: null, error: workflowCheck.reason || 'Transition de statut non autorisée par le workflow.' }
+      }
+    }
+  }
 
   let query = client.from(entity).update(body).eq('id', id)
   if (ORG_SCOPED_ENTITIES.has(entity)) query = query.eq('organization_id', organizationId)
