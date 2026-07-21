@@ -55,6 +55,8 @@ export default function UserManagementView() {
   // Invite dialog
   const [inviteOpen, setInviteOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteFullName, setInviteFullName] = useState('')
+  const [invitePassword, setInvitePassword] = useState('')
   const [inviteRole, setInviteRole] = useState<UserRole>('operator')
   const [inviteDept, setInviteDept] = useState('')
   const [inviting, setInviting] = useState(false)
@@ -93,16 +95,20 @@ export default function UserManagementView() {
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim()) return
+    if (!inviteEmail.trim() || !inviteFullName.trim()) return
     setInviting(true)
     try {
       await apiPost('/api/admin/users', {
         email: inviteEmail,
+        full_name: inviteFullName,
+        password: invitePassword || undefined,
         role: inviteRole,
         department: inviteDept,
       })
       setInviteOpen(false)
       setInviteEmail('')
+      setInviteFullName('')
+      setInvitePassword('')
       setInviteRole('operator')
       setInviteDept('')
       fetchUsers()
@@ -338,6 +344,16 @@ export default function UserManagementView() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
+              <Label className="text-sm">Nom complet</Label>
+              <Input
+                type="text"
+                placeholder="Jean Dupont"
+                className="mt-1"
+                value={inviteFullName}
+                onChange={e => setInviteFullName(e.target.value)}
+              />
+            </div>
+            <div>
               <Label className="text-sm">Email</Label>
               <Input
                 type="email"
@@ -346,6 +362,17 @@ export default function UserManagementView() {
                 value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)}
               />
+            </div>
+            <div>
+              <Label className="text-sm">Mot de passe</Label>
+              <Input
+                type="password"
+                placeholder="Minimum 8 caractères (laisser vide = généré auto)"
+                className="mt-1"
+                value={invitePassword}
+                onChange={e => setInvitePassword(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Si laissé vide, un mot de passe temporaire sera généré automatiquement.</p>
             </div>
             <div>
               <Label className="text-sm">Rôle</Label>
@@ -368,7 +395,7 @@ export default function UserManagementView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInviteOpen(false)}>Annuler</Button>
-            <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}>
+            <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim() || !inviteFullName.trim()}>
               {inviting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Inviter
             </Button>
