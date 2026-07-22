@@ -397,6 +397,10 @@ function createModelWrapper(tableName: string): any {
       if (!snakeData.id) {
         snakeData.id = randomUUID()
       }
+      // Auto-set updated_at if not provided (NOT NULL without DEFAULT in schema)
+      if (!snakeData.updated_at) {
+        snakeData.updated_at = new Date().toISOString()
+      }
 
       let selectStr: string | undefined
       if (select) {

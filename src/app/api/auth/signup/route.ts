@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const orgId = randomUUID()
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .insert({ id: orgId, name: orgName, slug, settings: JSON.stringify(settings) })
+      .insert({ id: orgId, name: orgName, slug, settings: JSON.stringify(settings), updated_at: new Date().toISOString() })
       .select()
       .single()
 
@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
         password_hash: passwordHash,
         organization_id: org.id,
         active: true,
+        updated_at: new Date().toISOString(),
       })
       .select('id, email, full_name, role, organization_id')
       .single()
