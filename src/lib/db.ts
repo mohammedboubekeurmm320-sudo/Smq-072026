@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { randomUUID } from 'crypto'
 
 // ============================================================================
 // Case conversion helpers
@@ -391,6 +392,11 @@ function createModelWrapper(tableName: string): any {
     async create(args: CreateArgs) {
       const { data, select } = args
       const snakeData = toSnakeCase(data)
+
+      // Auto-generate UUID for 'id' if not provided
+      if (!snakeData.id) {
+        snakeData.id = randomUUID()
+      }
 
       let selectStr: string | undefined
       if (select) {

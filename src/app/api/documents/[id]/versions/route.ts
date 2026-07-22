@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { requireAuth, requirePermission } from '@/lib/auth-server'
 import { createClient } from '@supabase/supabase-js'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -129,6 +130,7 @@ export async function POST(
 
     // Log version change in audit trail
     await client.from('audit_trails').insert({
+      id: randomUUID(),
       table_name: 'documents',
       record_id: id,
       audit_action: 'UPDATE',

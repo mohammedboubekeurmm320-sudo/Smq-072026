@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { hashPassword } from '@/lib/auth-server'
 import { signSession } from '@/lib/session'
 import { INDUSTRY_CONFIG, STANDARDS_BY_INDUSTRY, type IndustryType } from '@/types/qms'
+import { randomUUID } from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -44,9 +45,10 @@ export async function POST(req: NextRequest) {
       notifications: { capa_overdue: true, ncr_overdue: true, document_expiry: true, training_overdue: true, audit_due: true },
     }
 
+    const orgId = randomUUID()
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .insert({ name: orgName, slug, settings: JSON.stringify(settings) })
+      .insert({ id: orgId, name: orgName, slug, settings: JSON.stringify(settings) })
       .select()
       .single()
 
@@ -56,9 +58,11 @@ export async function POST(req: NextRequest) {
 
     // Créer le profil admin
     const passwordHash = await hashPassword(password)
+    const profileId = randomUUID()
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .insert({
+        id: profileId,
         email: email.toLowerCase().trim(),
         full_name: fullName,
         role: 'admin',
@@ -77,6 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Ajouter le membership
     await supabase.from('organization_members').insert({
+      id: randomUUID(),
       organization_id: org.id,
       user_id: profile.id,
       role: 'owner',
@@ -87,6 +92,7 @@ export async function POST(req: NextRequest) {
     const { data: sessionRow } = await supabase
       .from('sessions')
       .insert({
+        id: randomUUID(),
         profile_id: profile.id,
         user_agent: req.headers.get('user-agent') || null,
         ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
@@ -173,6 +179,7 @@ async function seedSystemRecordTypes(supabase: any, orgId: string, profileId: st
   const eSig: Record<string, boolean> = { capa: true, ncr: true, deviation: true, change_control: true, audit: true, risk: true, training: true, supplier: true, batch_record: true, oos_oot: true }
 
   const rows = slugs.map(slug => ({
+    id: randomUUID(),
     slug, name: names[slug], name_en: slug, icon: 'FileText',
     description: `${names[slug]} (système)`,
     status_flow_json: JSON.stringify(flows[slug]),
