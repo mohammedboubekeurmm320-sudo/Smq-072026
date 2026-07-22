@@ -39,12 +39,12 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
-  -- organization_id
-  BEGIN v_org_id := NEW.organization_id; EXCEPTION WHEN OTHERS THEN
-    BEGIN v_org_id := OLD.organization_id; EXCEPTION WHEN OTHERS THEN
-      v_org_id := current_org_id();
-    END;
-  END;
+  -- organization_id (safe access via jsonb to handle tables without this column)
+  v_org_id := coalesce(
+    to_jsonb(NEW)->>'organization_id',
+    to_jsonb(OLD)->>'organization_id',
+    current_org_id()
+  );
 
   -- user
   v_user_id := current_profile_id();

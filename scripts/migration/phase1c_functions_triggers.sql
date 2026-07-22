@@ -105,11 +105,11 @@ BEGIN
 
     v_user_id := NULL;
 
-    IF TG_OP IN ('INSERT','UPDATE') THEN
-        v_org_id := NEW.organization_id;
-    ELSIF TG_OP = 'DELETE' THEN
-        v_org_id := OLD.organization_id;
-    END IF;
+    -- organization_id (safe jsonb access for tables without this column)
+    v_org_id := coalesce(
+        to_jsonb(NEW)->>'organization_id',
+        to_jsonb(OLD)->>'organization_id'
+    );
 
     BEGIN
         INSERT INTO audit_trails (audit_action, table_name, record_id, user_id, old_values, new_values, organization_id)
