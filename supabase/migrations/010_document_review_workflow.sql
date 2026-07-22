@@ -60,7 +60,7 @@ DECLARE
   v_approval_sig RECORD;
 BEGIN
   -- Récupérer le document
-  SELECT author_id, created_by, approver_id, effective_date
+  SELECT author_id, created_by_id, approver_id, effective_date
     INTO v_doc
   FROM documents
   WHERE id = p_document_id;
@@ -72,8 +72,8 @@ BEGIN
     RETURN;
   END IF;
 
-  v_author_id  := COALESCE(v_doc.author_id, v_doc.created_by);
-  v_creator_id := v_doc.created_by;
+  v_author_id  := COALESCE(v_doc.author_id, v_doc.created_by_id);
+  v_creator_id := v_doc.created_by_id;
 
   -- Pas de changement de statut → toujours autorisé
   IF p_current_status = p_new_status THEN

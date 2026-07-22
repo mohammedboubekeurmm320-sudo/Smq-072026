@@ -94,7 +94,7 @@ async function checkApprovalTransition(
   // 1. Récupérer l'auteur et créateur du document
   const { data: doc, error: docError } = await client
     .from('documents')
-    .select('author_id, created_by')
+    .select('author_id, created_by_id')
     .eq('id', documentId)
     .single()
 
@@ -102,8 +102,8 @@ async function checkApprovalTransition(
     return { allowed: false, reason: 'Document introuvable lors de la vérification du workflow.' }
   }
 
-  const authorId = doc.author_id || doc.created_by
-  const creatorId = doc.created_by
+  const authorId = doc.author_id || doc.created_by_id
+  const creatorId = doc.created_by_id
 
   // 2. Vérifier l'existence d'une signature d'approbation non révoquée
   const { data: approvalSig, error: sigError } = await client

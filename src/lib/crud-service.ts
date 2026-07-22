@@ -78,7 +78,7 @@ export async function create<T = any>(request: Request, entity: CrudEntity, body
   else delete sanitizedBody.organization_id
 
   const tablesWithCreator = ['documents', 'form_templates', 'form_instances', 'capas', 'non_conformances', 'deviations', 'change_controls', 'audits', 'training', 'risks', 'suppliers', 'batch_records', 'scheduled_reports', 'notifications']
-  if (tablesWithCreator.includes(entity) && profileId) sanitizedBody.created_by = profileId
+  if (tablesWithCreator.includes(entity) && profileId) sanitizedBody.created_by_id = profileId
 
   const { data, error: qError } = await client.from(entity).insert(sanitizedBody).select().single()
   return { data: data as T, error: qError?.message }
@@ -90,11 +90,15 @@ export async function update<T = any>(request: Request, entity: CrudEntity, id: 
 
   // --- Garde-fou workflow documentaire (séparation des tâches, 21 CFR Part 11) ---
   if (entity === 'documents' && body.status && profileId) {
-    const { data: currentDoc } = await client
+    const { data: currentDoc, error: docFetchError } = await client
       .from('documents')
-      .select('status, author_id, created_by')
+      .select('status, author_id, created_by_id')
       .eq('id', id)
       .single()
+
+    if (docFetchError) {
+      return { data: null, error: 'Impossible de vérifier le statut actuel du document — mise à jour refusée par sécurité.' }
+    }
 
     if (currentDoc && body.status !== currentDoc.status) {
       const workflowCheck = await checkDocumentStatusTransition(
