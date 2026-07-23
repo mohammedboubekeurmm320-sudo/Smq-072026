@@ -8,6 +8,7 @@ import {
   type CrudEntity,
 } from '@/lib/crud-service'
 import { resolveEntitySlug } from '@/lib/entity-slug-map'
+import { sanitizeDbError } from '@/lib/error-sanitizer'
 
 // Helper: réponse standardisée { success, data }
 function ok(data: any, status = 200) {
@@ -65,7 +66,7 @@ export async function GET(
     offset: parseInt(searchParams.get('offset') || '0'),
   })
 
-  if (result.error) return err(result.error, 500)
+  if (result.error) return err(sanitizeDbError(result.error), 500)
   return ok({ items: result.data, count: result.count })
 }
 
@@ -92,6 +93,6 @@ export async function POST(
   }
 
   const result = await create(request, entity as CrudEntity, body)
-  if (result.error) return err(result.error, 400)
+  if (result.error) return err(sanitizeDbError(result.error), 400)
   return ok(result.data, 201)
 }

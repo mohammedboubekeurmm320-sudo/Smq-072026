@@ -12,7 +12,16 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
+    let body: any
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'JSON invalide dans le corps de la requête' },
+        { status: 400 }
+      )
+    }
+    const { email, password } = body || {}
 
     if (!email || !password) {
       return NextResponse.json(

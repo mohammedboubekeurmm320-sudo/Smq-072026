@@ -9,6 +9,7 @@ import {
   type CrudEntity,
 } from '@/lib/crud-service'
 import { resolveEntitySlug } from '@/lib/entity-slug-map'
+import { sanitizeDbError } from '@/lib/error-sanitizer'
 
 function ok(data: any) {
   return NextResponse.json({ success: true, data })
@@ -30,7 +31,7 @@ export async function GET(
   }
 
   const result = await getById(request, entity as CrudEntity, id)
-  if (result.error) return err(result.error, 404)
+  if (result.error) return err(sanitizeDbError(result.error), 404)
   return ok(result.data)
 }
 
@@ -54,7 +55,7 @@ export async function PUT(
   }
 
   const result = await update(request, entity as CrudEntity, id, body)
-  if (result.error) return err(result.error, 400)
+  if (result.error) return err(sanitizeDbError(result.error), 400)
   return ok(result.data)
 }
 
@@ -74,11 +75,11 @@ export async function DELETE(
 
   if (searchParams.get('hard') === 'true') {
     const result = await remove(request, entity as CrudEntity, id)
-    if (result.error) return err(result.error, 500)
+    if (result.error) return err(sanitizeDbError(result.error), 500)
     return ok({ deleted: true })
   }
 
   const result = await softDelete(request, entity as CrudEntity, id)
-  if (result.error) return err(result.error, 500)
+  if (result.error) return err(sanitizeDbError(result.error), 500)
   return ok(result.data)
 }

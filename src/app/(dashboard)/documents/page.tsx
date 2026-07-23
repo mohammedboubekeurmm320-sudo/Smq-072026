@@ -140,7 +140,10 @@ export default function DocumentControlView() {
       })
       setNewDialogOpen(false)
       setNewDoc({ title: '', type: 'PROCEDURE', level: '3', description: '', parent_id: '' })
-    } catch (e: any) { alert(e.message) }
+    } catch (e: any) {
+      // BUG-10: afficher un message d'erreur explicite à l'utilisateur
+      alert('Impossible de créer le document : ' + (e?.message || 'erreur inconnue'))
+    }
     finally { setCreating(false) }
   }
 
