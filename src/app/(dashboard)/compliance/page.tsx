@@ -45,7 +45,7 @@ const CATEGORY_ICONS: Record<string, any> = {
 }
 
 export default function CompliancePage() {
-  const { profile } = useAuth()
+  const { user: profile } = useAuth()
   const [checklistId, setChecklistId] = useState('iso13485')
   const [rawData, setRawData] = useState<ComplianceData | null>(null)
   const [loading, setLoading] = useState(true)

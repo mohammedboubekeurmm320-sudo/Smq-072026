@@ -50,7 +50,7 @@ const ORG_SIZES = [
 
 export default function AdminSettingsPage() {
   const router = useRouter()
-  const { profile } = useAuth()
+  const { user: profile, currentOrgId } = useAuth()
   const [loading, setLoading] = useState(true)
   const [savingTab, setSavingTab] = useState<string | null>(null)
   const [message, setMessage] = useState<{ tab: string; text: string; ok: boolean } | null>(null)
@@ -82,7 +82,7 @@ export default function AdminSettingsPage() {
   const [notifAuditDue, setNotifAuditDue] = useState(true)
 
   useEffect(() => {
-    if (!profile?.organizationId) return
+    if (!currentOrgId) return
     setLoading(true)
     apiGet<any>(`/api/organizations`)
       .then((data: any) => {
@@ -116,10 +116,10 @@ export default function AdminSettingsPage() {
         }
       }
     }).catch(() => {})
-  }, [profile?.organizationId])
+  }, [currentOrgId])
 
   const saveTab = async (tab: string, data: any) => {
-    if (!profile?.organizationId) return
+    if (!currentOrgId) return
     setSavingTab(tab)
     setMessage(null)
     try {
