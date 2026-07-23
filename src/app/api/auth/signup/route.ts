@@ -14,9 +14,50 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password, fullName, orgName, industry } = await req.json()
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ success: false, error: 'JSON invalide dans le corps de la requête' }, { status: 400 })
+    }
+    const { email, password, fullName, orgName, industry } = body
     if (!email || !password || !fullName || !orgName) {
       return NextResponse.json({ success: false, error: 'Champs obligatoires manquants' }, { status: 400 })
+    }
+
+    // --- Validation des entrées (BUG-12) ---
+    // Email: format RFC 5322 simplifié
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(String(email))) {
+      return NextResponse.json({ success: false, error: 'Format d\'email invalide' }, { status: 400 })
+    }
+
+    // Mot de passe: minimum 12 caractères, complexité (majuscule, minuscule, chiffre, spécial)
+    const pwd = String(password)
+    if (pwd.length < 12) {
+      return NextResponse.json({ success: false, error: 'Le mot de passe doit contenir au moins 12 caractères' }, { status: 400 })
+    }
+    if (!/[A-Z]/.test(pwd) || !/[a-z]/.test(pwd) || !/[0-9]/.test(pwd) || !/[^A-Za-z0-9]/.test(pwd)) {
+      return NextResponse.json({ success: false, error: 'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial' }, { status: 400 })
+    }
+
+    // Longueur max des champs texte (protection DoS + cohérence DB)
+    const MAX_NAME_LEN = 255
+    const MAX_ORG_LEN = 255
+    if (String(fullName).length > MAX_NAME_LEN) {
+      return NextResponse.json({ success: false, error: `Le nom complet ne peut pas dépasser ${MAX_NAME_LEN} caractères` }, { status: 400 })
+    }
+    if (String(orgName).length > MAX_ORG_LEN) {
+      return NextResponse.json({ success: false, error: `Le nom de l\'organisation ne peut pas dépasser ${MAX_ORG_LEN} caractères` }, { status: 400 })
+    }
+    if (String(email).length > 320) { // RFC 5321
+      return NextResponse.json({ success: false, error: 'Email trop long' }, { status: 400 })
+    }
+
+    // Rejet des contenus HTML/script (protection XSS stocké)
+    const htmlTagRegex = /<[a-zA-Z][^>]*>|<\/[a-zA-Z][^>]*>/
+    if (htmlTagRegex.test(String(fullName)) || htmlTagRegex.test(String(orgName))) {
+      return NextResponse.json({ success: false, error: 'Les balises HTML ne sont pas autorisées dans le nom ou le nom d\'organisation' }, { status: 400 })
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey)
@@ -81,37 +122,51 @@ export async function POST(req: NextRequest) {
     }
 
     // Ajouter le membership
-    await supabase.from('organization_members').insert({
+    // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+    const { error: memberInsertError } = await supabase.from('organization_members').insert({
       id: randomUUID(),
       organization_id: org.id,
-      user_id: profile.id,
+      profile_id: profile.id,
       role: 'owner',
       status: 'active',
-      updated_at: new Date().toISOString(),
     })
 
-    // Créer la session en base pour révocation
-    const { data: sessionRow } = await supabase
-      .from('sessions')
-      .insert({
-        id: randomUUID(),
-        profile_id: profile.id,
-        updated_at: new Date().toISOString(),
-        user_agent: req.headers.get('user-agent') || null,
-        ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .select('id')
-      .single()
+    if (memberInsertError) {
+      console.error('[signup] organization_members insert failed:', memberInsertError.message)
+      // Rollback: supprimer le profil et l'org
+      await supabase.from('profiles').delete().eq('id', profile.id)
+      await supabase.from('organizations').delete().eq('id', org.id)
+      return NextResponse.json({ success: false, error: 'Impossible de créer le membership.' }, { status: 500 })
+    }
 
+    // Créer la session en base pour révocation.
+    // IMPORTANT: la table `sessions` ne contient QUE {id, token, profile_id, expires_at, created_at}.
+    const sessionId = randomUUID()
     const sessionToken = await signSession({
       sub: profile.id,
       email: profile.email,
       name: profile.full_name,
       organizationId: org.id,
       role: 'admin',
-      sid: sessionRow?.id,
+      sid: sessionId,
     })
+    const { data: sessionRow, error: sessionInsertError } = await supabase
+      .from('sessions')
+      .insert({
+        id: sessionId,
+        token: sessionToken,
+        profile_id: profile.id,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .select('id')
+      .single()
+
+    if (sessionInsertError || !sessionRow) {
+      console.error('[signup] session insert failed:', sessionInsertError?.message)
+      // Non-bloquant: l'utilisateur peut tout de même se connecter (le middleware
+      // vérifiera sid contre la table — si absent, sid sera undefined et le check
+      // sera ignoré). On logge l'erreur pour investigation.
+    }
 
     // Seed system record types
     await seedSystemRecordTypes(supabase, org.id, profile.id)

@@ -64,8 +64,12 @@ export default function DocumentControlView() {
       list = list.filter((d: any) => (d.title || '').toLowerCase().includes(q) || (d.document_number || '').toLowerCase().includes(q))
     }
     if (statusFilter !== 'ALL') list = list.filter((d: any) => d.status === statusFilter)
-    if (typeFilter !== 'ALL') list = list.filter((d: any) => d.document_type === typeFilter)
-    if (levelFilter !== 'ALL') list = list.filter((d: any) => String(d.level) === levelFilter)
+    if (typeFilter !== 'ALL') list = list.filter((d: any) => d.doc_type === typeFilter)
+    if (levelFilter !== 'ALL') list = list.filter((d: any) => {
+      const m = typeof d.document_level === 'string' ? d.document_level.match(/Level_(\d)/) : null
+      const lvl = m ? m[1] : String(d.document_level || '')
+      return lvl === levelFilter
+    })
     if (tab === 'in_progress') list = list.filter((d: any) => !['Effective', 'Obsolete', 'Withdrawn'].includes(d.status))
     if (tab === 'pending_approval') list = list.filter((d: any) => d.status === 'Under Review')
     if (tab === 'effective') list = list.filter((d: any) => d.status === 'Effective')
@@ -124,16 +128,22 @@ export default function DocumentControlView() {
     if (!newDoc.title.trim()) return
     setCreating(true)
     try {
+      // IMPORTANT: les colonnes DB sont `doc_type` (enum) et `document_level` (text).
+      // Le front-end utilisait `document_type` et `level` (inexistants en base).
+      // Le `document_number` est auto-généré par l'API (crud-service).
       await create({
         title: newDoc.title,
-        document_type: newDoc.type,
-        level: Number(newDoc.level),
+        doc_type: newDoc.type,
+        document_level: `Level_${newDoc.level}`,
         description: newDoc.description,
-        parent_id: newDoc.parent_id || undefined,
+        parent_document_id: newDoc.parent_id || undefined,
       })
       setNewDialogOpen(false)
       setNewDoc({ title: '', type: 'PROCEDURE', level: '3', description: '', parent_id: '' })
-    } catch (e: any) { alert(e.message) }
+    } catch (e: any) {
+      // BUG-10: afficher un message d'erreur explicite à l'utilisateur
+      alert('Impossible de créer le document : ' + (e?.message || 'erreur inconnue'))
+    }
     finally { setCreating(false) }
   }
 
@@ -142,8 +152,12 @@ export default function DocumentControlView() {
   const columns = [
     { key: 'document_number', label: 'Réf.', render: (v: any, r: any) => v ? <Badge variant="outline" className="font-mono text-xs">{v}</Badge> : '—' },
     { key: 'title', label: 'Titre', sortable: true, render: (v: any) => <span className="font-medium truncate max-w-xs block">{v || '—'}</span> },
-    { key: 'document_type', label: 'Type', render: (v: any) => <Badge variant="secondary" className="text-xs">{DOC_TYPE_LABELS[v as DocumentType] || v}</Badge> },
-    { key: 'level', label: 'Niv.', render: (v: any) => v ? <Badge variant="outline" className="text-xs">L{v}</Badge> : '—' },
+    { key: 'doc_type', label: 'Type', render: (v: any) => <Badge variant="secondary" className="text-xs">{DOC_TYPE_LABELS[v as DocumentType] || v}</Badge> },
+    { key: 'document_level', label: 'Niv.', render: (v: any) => {
+      // Map "Level_3" → "L3"
+      const m = typeof v === 'string' ? v.match(/Level_(\d)/) : null
+      return m ? <Badge variant="outline" className="text-xs">L{m[1]}</Badge> : (v ? <Badge variant="outline" className="text-xs">{v}</Badge> : '—')
+    } },
     { key: 'status', label: 'Statut', render: (v: any) => <Badge variant="outline" className={`text-xs ${getStatusColor(v)}`}>{v}</Badge> },
     { key: 'version', label: 'V.', render: (v: any) => v || '1' },
     { key: 'created_at', label: 'Créé le', sortable: true, render: (v: any) => fmtDate(v) },
@@ -283,8 +297,12 @@ export default function DocumentControlView() {
               </SheetHeader>
               <div className="mt-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div><Label className="text-muted-foreground">Type</Label><p className="font-medium text-sm mt-1">{DOC_TYPE_LABELS[selectedDoc.document_type] || selectedDoc.document_type}</p></div>
-                  <div><Label className="text-muted-foreground">Niveau</Label><p className="font-medium text-sm mt-1">{DOC_LEVEL_LABELS[selectedDoc.level] || selectedDoc.level}</p></div>
+                  <div><Label className="text-muted-foreground">Type</Label><p className="font-medium text-sm mt-1">{DOC_TYPE_LABELS[selectedDoc.doc_type] || selectedDoc.doc_type}</p></div>
+                  <div><Label className="text-muted-foreground">Niveau</Label><p className="font-medium text-sm mt-1">{(() => {
+                    const m = typeof selectedDoc.document_level === 'string' ? selectedDoc.document_level.match(/Level_(\d)/) : null
+                    if (m) return `L${m[1]} — ${DOC_LEVEL_LABELS[Number(m[1])] || ''}`
+                    return selectedDoc.document_level || '—'
+                  })()}</p></div>
                   <div><Label className="text-muted-foreground">Statut</Label><div className="mt-1"><Badge variant="outline" className={getStatusColor(selectedDoc.status)}>{selectedDoc.status}</Badge></div></div>
                   <div><Label className="text-muted-foreground">Version</Label><p className="font-medium text-sm mt-1">{selectedDoc.version || '1'}</p></div>
                 </div>

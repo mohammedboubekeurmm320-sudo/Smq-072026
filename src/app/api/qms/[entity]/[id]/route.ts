@@ -8,16 +8,8 @@ import {
   getById, update, softDelete, remove,
   type CrudEntity,
 } from '@/lib/crud-service'
-
-const ALLOWED: CrudEntity[] = [
-  'documents', 'electronic_signatures', 'document_prerequisites',
-  'form_templates', 'form_instances',
-  'capas', 'non_conformances', 'deviations', 'change_controls',
-  'audits', 'training', 'risks', 'suppliers', 'batch_records',
-  'departments', 'record_type_definitions', 'record_links',
-  'document_triggers', 'document_relationships',
-  'scheduled_reports', 'notifications',
-]
+import { resolveEntitySlug } from '@/lib/entity-slug-map'
+import { sanitizeDbError } from '@/lib/error-sanitizer'
 
 function ok(data: any) {
   return NextResponse.json({ success: true, data })
@@ -31,14 +23,15 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ entity: string; id: string }> }
 ) {
-  const { entity, id } = await params
+  const { entity: rawEntity, id } = await params
+  const entity = resolveEntitySlug(rawEntity)
 
-  if (!ALLOWED.includes(entity as CrudEntity)) {
+  if (!entity) {
     return err('Entity not allowed')
   }
 
   const result = await getById(request, entity as CrudEntity, id)
-  if (result.error) return err(result.error, 404)
+  if (result.error) return err(sanitizeDbError(result.error), 404)
   return ok(result.data)
 }
 
@@ -47,15 +40,22 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ entity: string; id: string }> }
 ) {
-  const { entity, id } = await params
+  const { entity: rawEntity, id } = await params
+  const entity = resolveEntitySlug(rawEntity)
 
-  if (!ALLOWED.includes(entity as CrudEntity)) {
+  if (!entity) {
     return err('Entity not allowed')
   }
 
-  const body = await request.json()
+  let body: any
+  try {
+    body = await request.json()
+  } catch {
+    return err('JSON invalide dans le corps de la requête', 400)
+  }
+
   const result = await update(request, entity as CrudEntity, id, body)
-  if (result.error) return err(result.error, 400)
+  if (result.error) return err(sanitizeDbError(result.error), 400)
   return ok(result.data)
 }
 
@@ -64,9 +64,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ entity: string; id: string }> }
 ) {
-  const { entity, id } = await params
+  const { entity: rawEntity, id } = await params
+  const entity = resolveEntitySlug(rawEntity)
 
-  if (!ALLOWED.includes(entity as CrudEntity)) {
+  if (!entity) {
     return err('Entity not allowed')
   }
 
@@ -74,11 +75,11 @@ export async function DELETE(
 
   if (searchParams.get('hard') === 'true') {
     const result = await remove(request, entity as CrudEntity, id)
-    if (result.error) return err(result.error, 500)
+    if (result.error) return err(sanitizeDbError(result.error), 500)
     return ok({ deleted: true })
   }
 
   const result = await softDelete(request, entity as CrudEntity, id)
-  if (result.error) return err(result.error, 500)
+  if (result.error) return err(sanitizeDbError(result.error), 500)
   return ok(result.data)
 }

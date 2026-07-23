@@ -36,7 +36,7 @@ export default function EntityDetailPage() {
   const entity = params.entity as string
   const id = params.id as string
   const entityConfig = getEntityConfig(entity)
-  const { profile } = useAuth()
+  const { user: profile } = useAuth()
   const { getById, update, remove, isUpdating, isDeleting } = useQmsEntity(entity)
   const auditTrail = useAuditTrail({ entity: entityConfig?.table, recordId: id, limit: 50 })
 
@@ -93,7 +93,7 @@ export default function EntityDetailPage() {
   const handleSave = async () => {
     try {
       const { id: _id, created_at: _ca, updated_at: _ua, created_by: _cb, ...body } = form
-      await update(id, body)
+      await update({ id, data: body })
       setEditMode(false)
       const refreshed = await getById(id)
       setRecord(refreshed)

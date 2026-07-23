@@ -7,16 +7,8 @@ import {
   getAll, create,
   type CrudEntity,
 } from '@/lib/crud-service'
-
-const ALLOWED: CrudEntity[] = [
-  'documents', 'electronic_signatures', 'document_prerequisites',
-  'form_templates', 'form_instances',
-  'capas', 'non_conformances', 'deviations', 'change_controls',
-  'audits', 'training', 'risks', 'suppliers', 'batch_records',
-  'departments', 'record_type_definitions', 'record_links',
-  'document_triggers', 'document_relationships',
-  'scheduled_reports', 'notifications',
-]
+import { resolveEntitySlug } from '@/lib/entity-slug-map'
+import { sanitizeDbError } from '@/lib/error-sanitizer'
 
 // Helper: réponse standardisée { success, data }
 function ok(data: any, status = 200) {
@@ -26,14 +18,29 @@ function err(message: string, status = 400) {
   return NextResponse.json({ success: false, error: message }, { status })
 }
 
+/**
+ * Convertit un nom de colonne camelCase → snake_case.
+ * Le front-end envoie parfois `createdAt`, `updatedAt`, etc. (camelCase JS)
+ * mais les colonnes PostgreSQL sont en snake_case (`created_at`, `updated_at`).
+ *
+ * Exemples:
+ *   createdAt → created_at
+ *   dueDate   → due_date
+ *   title     → title (inchangé)
+ */
+function toSnakeCase(s: string): string {
+  return s.replace(/([A-Z])/g, '_$1').toLowerCase()
+}
+
 // GET /api/qms/[entity] → liste
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ entity: string }> }
 ) {
-  const { entity } = await params
+  const { entity: rawEntity } = await params
+  const entity = resolveEntitySlug(rawEntity)
 
-  if (!ALLOWED.includes(entity as CrudEntity)) {
+  if (!entity) {
     return err('Entity not allowed')
   }
 
@@ -42,20 +49,24 @@ export async function GET(
   const skip = ['sort', 'order', 'limit', 'offset', 'select']
 
   for (const [key, value] of searchParams.entries()) {
-    if (!skip.includes(key) && value) filters[key] = value
+    if (!skip.includes(key) && value) filters[toSnakeCase(key)] = value
   }
+
+  // Convertir sort=createdAt → sort=created_at (camelCase → snake_case)
+  const rawSort = searchParams.get('sort')
+  const orderBy = rawSort ? toSnakeCase(rawSort) : 'created_at'
 
   const result = await getAll(request, {
     entity: entity as CrudEntity,
     select: searchParams.get('select') || undefined,
     filters: Object.keys(filters).length > 0 ? filters : undefined,
-    orderBy: searchParams.get('sort') || 'created_at',
+    orderBy,
     orderAsc: searchParams.get('order') === 'asc',
     limit: parseInt(searchParams.get('limit') || '50'),
     offset: parseInt(searchParams.get('offset') || '0'),
   })
 
-  if (result.error) return err(result.error, 500)
+  if (result.error) return err(sanitizeDbError(result.error), 500)
   return ok({ items: result.data, count: result.count })
 }
 
@@ -64,18 +75,24 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ entity: string }> }
 ) {
-  const { entity } = await params
+  const { entity: rawEntity } = await params
+  const entity = resolveEntitySlug(rawEntity)
 
-  if (!ALLOWED.includes(entity as CrudEntity)) {
+  if (!entity) {
     return err('Entity not allowed')
   }
 
-  const body = await request.json()
+  let body: any
+  try {
+    body = await request.json()
+  } catch {
+    return err('JSON invalide dans le corps de la requête', 400)
+  }
   if (!body || typeof body !== 'object') {
     return err('Body requis')
   }
 
   const result = await create(request, entity as CrudEntity, body)
-  if (result.error) return err(result.error, 400)
+  if (result.error) return err(sanitizeDbError(result.error), 400)
   return ok(result.data, 201)
 }

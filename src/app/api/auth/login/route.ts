@@ -12,7 +12,16 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
+    let body: any
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'JSON invalide dans le corps de la requête' },
+        { status: 400 }
+      )
+    }
+    const { email, password } = body || {}
 
     if (!email || !password) {
       return NextResponse.json(
@@ -55,15 +64,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer l'org et le rôle
-    const { data: membership } = await supabase
+    // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+    const { data: membership, error: membershipError } = await supabase
       .from('organization_members')
       .select('organization_id, role')
-      .eq('user_id', profile.id)
+      .eq('profile_id', profile.id)
       .eq('status', 'active')
       .limit(1)
-      .single()
+      .maybeSingle()
 
-    // Créer la session en base pour permettre la révocation
+    if (membershipError) {
+      console.error('[login] membership lookup failed:', membershipError.message)
+    }
+
+    // Créer la session en base pour permettre la révocation.
+    // IMPORTANT: la table `sessions` ne contient QUE les colonnes
+    // {id, token, profile_id, expires_at, created_at} — ne pas insérer
+    // updated_at / user_agent / ip (ces colonnes n'existent pas en base).
     const sessionId = randomUUID()
     const sessionToken = await signSession({
       sub: profile.id,
@@ -73,19 +90,26 @@ export async function POST(request: NextRequest) {
       role: membership?.role || 'member',
       sid: sessionId,
     })
-    const { data: sessionRow } = await supabase
+    const { data: sessionRow, error: sessionInsertError } = await supabase
       .from('sessions')
       .insert({
         id: sessionId,
-        updated_at: new Date().toISOString(),
         token: sessionToken,
         profile_id: profile.id,
-        user_agent: request.headers.get('user-agent') || null,
-        ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       .select('id')
       .single()
+
+    if (sessionInsertError || !sessionRow) {
+      // 21 CFR Part 11 — fail-closed: si la session ne peut pas être persistée,
+      // on refuse la connexion plutôt que d'émettre un JWT non-révocable.
+      console.error('[login] session insert failed — denying login:', sessionInsertError?.message)
+      return NextResponse.json(
+        { error: 'Impossible de créer la session. Veuillez réessayer.' },
+        { status: 500 }
+      )
+    }
 
     // Mettre à jour last_login
     await supabase

@@ -66,6 +66,10 @@ export function useQmsEntity<T = any>(entitySlug: string, params: QueryParams = 
     mutationFn: (data: Partial<T>) => apiPost<T>(basePath, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qms', entitySlug] })
+      // BUG-17: invalider aussi les KPIs dashboard pour qu'ils se rafrachissent
+      // apres toute mutation sur une entité QMS.
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 
@@ -75,6 +79,8 @@ export function useQmsEntity<T = any>(entitySlug: string, params: QueryParams = 
       apiPut<T>(`${basePath}/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qms', entitySlug] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 
@@ -83,6 +89,8 @@ export function useQmsEntity<T = any>(entitySlug: string, params: QueryParams = 
     mutationFn: (id: string) => apiDelete(`${basePath}/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['qms', entitySlug] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 
@@ -146,7 +154,10 @@ export function useAuditTrail(params: { entity?: string; recordId?: string; limi
 export function useNotifications(limit: number = 20) {
   return useQuery({
     queryKey: ['notifications', limit],
-    queryFn: () => apiGet<any>(`/api/qms/notifications?limit=${limit}&sort=createdAt&order=desc`),
+    // IMPORTANT: la colonne PostgreSQL est `created_at` (snake_case).
+    // L'API fait aussi la conversion camelCase → snake_case côté serveur,
+    // mais on envoie directement le bon nom pour éviter toute ambiguïté.
+    queryFn: () => apiGet<any>(`/api/qms/notifications?limit=${limit}&sort=created_at&order=desc`),
     staleTime: 10_000,
   })
 }

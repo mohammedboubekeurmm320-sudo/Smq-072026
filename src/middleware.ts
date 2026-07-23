@@ -10,7 +10,21 @@ import { authRateLimit, getRateLimitKey } from '@/lib/rate-limit'
 import { verifySession } from '@/lib/session'
 
 const RATE_LIMITED_AUTH_PATHS = ['/api/auth/login', '/api/auth/signup', '/api/auth/verify-signature']
-const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/signup', '/api/auth/verify-signature', '/login', '/signup', '/_next', '/favicon.ico']
+const PUBLIC_PATHS = [
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/logout',
+  '/api/auth/verify-signature',
+  '/login',
+  '/signup',
+  '/_next',
+  '/favicon.ico',
+  '/robots.txt',
+  '/manifest.json',
+  '/icon.png',
+  '/icon.svg',
+  '/sitemap.xml',
+]
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(p => pathname.startsWith(p))
