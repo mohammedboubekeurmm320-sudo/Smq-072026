@@ -64,11 +64,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer l'org et le rôle
-    // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+    // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
+    // (malgré ce que disent les fichiers Prisma / migration 000 obsolètes).
     const { data: membership, error: membershipError } = await supabase
       .from('organization_members')
       .select('organization_id, role')
-      .eq('profile_id', profile.id)
+      .eq('user_id', profile.id)
       .eq('status', 'active')
       .limit(1)
       .maybeSingle()

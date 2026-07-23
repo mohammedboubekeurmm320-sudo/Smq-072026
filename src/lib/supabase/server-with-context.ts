@@ -49,9 +49,10 @@ export async function getAuthenticatedClient(request: Request) {
   if (!profile || !profile.active) return { client: null, profileId: null, organizationId: null, error: 'Profile not found or inactive' }
 
   // Dériver organization_id depuis organization_members (source de vérité)
-  // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+  // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
+  // (malgré ce que disent les fichiers Prisma / migration 000 obsolètes).
   let organizationId: string | null = profile.organization_id
-  const { data: membership } = await client.from('organization_members').select('organization_id').eq('profile_id', profileId).eq('status', 'active').limit(1).maybeSingle()
+  const { data: membership } = await client.from('organization_members').select('organization_id').eq('user_id', profileId).eq('status', 'active').limit(1).maybeSingle()
   if (membership?.organization_id) organizationId = membership.organization_id
   if (!organizationId) return { client: null, profileId: null, organizationId: null, error: 'No organization assigned' }
 

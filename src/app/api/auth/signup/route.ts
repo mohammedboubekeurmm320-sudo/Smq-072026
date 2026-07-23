@@ -122,11 +122,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Ajouter le membership
-    // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+    // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
+    // (malgré ce que disent les fichiers Prisma / migration 000 obsolètes).
     const { error: memberInsertError } = await supabase.from('organization_members').insert({
       id: randomUUID(),
       organization_id: org.id,
-      profile_id: profile.id,
+      user_id: profile.id,
       role: 'owner',
       status: 'active',
     })
