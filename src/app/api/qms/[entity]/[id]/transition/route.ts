@@ -7,8 +7,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getById, update, type CrudEntity } from '@/lib/crud-service'
 import { canTransition } from '@/lib/status-flows'
 import type { UserRole } from '@/types/qms'
+import { resolveEntitySlug } from '@/lib/entity-slug-map'
 
-const ALLOWED: CrudEntity[] = [
+// Entités qui supportent les transitions de statut (avec signature électronique
+// potentielle — 21 CFR Part 11). Toutes les autres entités renvoient 400.
+const TRANSITIONABLE: CrudEntity[] = [
   'capas', 'non_conformances', 'deviations', 'change_controls',
   'audits', 'training', 'risks', 'suppliers', 'batch_records',
 ]
@@ -24,13 +27,19 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ entity: string; id: string }> }
 ) {
-  const { entity, id } = await params
+  const { entity: rawEntity, id } = await params
+  const entity = resolveEntitySlug(rawEntity)
 
-  if (!ALLOWED.includes(entity as CrudEntity)) {
+  if (!entity || !TRANSITIONABLE.includes(entity as CrudEntity)) {
     return err('Transitions non supportées pour cette entité')
   }
 
-  const body = await request.json()
+  let body: any
+  try {
+    body = await request.json()
+  } catch {
+    return err('JSON invalide dans le corps de la requête', 400)
+  }
   const { targetStatus, signatureHash, reason } = body
 
   if (!targetStatus) {

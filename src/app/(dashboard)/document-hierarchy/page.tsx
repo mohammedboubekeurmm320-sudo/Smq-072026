@@ -15,6 +15,17 @@ import {
   FileText, Search, Expand, Shrink, Link2, Unlink,
 } from 'lucide-react'
 
+// Mapping des valeurs d'enum doc_type (PostgreSQL) vers libellés français affichés
+// dans l'UI. Doit rester cohérent avec @/app/(dashboard)/documents/page.tsx.
+const DOC_TYPE_LABELS: Record<string, string> = {
+  MANUEL: 'Manuel', POLITIQUE: 'Politique', INDICATEUR: 'Indicateur',
+  PROCESS_MAP: 'Carte Processus', ORGANIGRAMME: 'Organigramme',
+  REGLEMENTAIRE: 'Réglementaire', MAPPING: 'Mapping', PROCEDURE: 'Procédure',
+  INSTRUCTION: 'Instruction', FORMULAIRE: 'Formulaire', REGISTRE: 'Registre',
+  ENREGISTREMENT: 'Enregistrement', MASTER_BATCH: 'Master Batch',
+  SOP: 'SOP', WI: 'WI', Form: 'Form', Policy: 'Policy', Specification: 'Spécification',
+}
+
 const LEVEL_COLORS: Record<number, { bg: string; border: string; text: string; dot: string }> = {
   1: { bg: 'bg-purple-50 dark:bg-purple-950/30', border: 'border-l-purple-500', text: 'text-purple-700 dark:text-purple-400', dot: 'bg-purple-500' },
   2: { bg: 'bg-teal-50 dark:bg-teal-950/30', border: 'border-l-teal-500', text: 'text-teal-700 dark:text-teal-400', dot: 'bg-teal-500' },
@@ -23,9 +34,9 @@ const LEVEL_COLORS: Record<number, { bg: string; border: string; text: string; d
 }
 
 const LEVEL_LABELS: Record<number, { fr: string }> = {
-  1: { fr: 'N1 - Strategique' },
+  1: { fr: 'N1 - Stratégique' },
   2: { fr: 'N2 - Transversal' },
-  3: { fr: 'N3 - Metier / Technique' },
+  3: { fr: 'N3 - Métier / Technique' },
   4: { fr: 'N4 - Enregistrement' },
 }
 
@@ -40,6 +51,17 @@ interface TreeNode {
   children: TreeNode[]
 }
 
+function parseDocumentLevel(raw: any): number {
+  if (typeof raw === 'number') return raw
+  if (typeof raw === 'string') {
+    const m = raw.match(/Level_(\d)/)
+    if (m) return parseInt(m[1], 10)
+    const n = parseInt(raw, 10)
+    if (!isNaN(n)) return n
+  }
+  return 4
+}
+
 function buildTree(docs: any[]): TreeNode[] {
   const map = new Map<string, TreeNode>()
   const roots: TreeNode[] = []
@@ -50,7 +72,7 @@ function buildTree(docs: any[]): TreeNode[] {
       title: doc.title,
       docType: doc.doc_type || doc.type || '',
       status: doc.status,
-      level: doc.document_level || doc.level || 4,
+      level: parseDocumentLevel(doc.document_level || doc.level),
       parentDocumentId: doc.parent_document_id || null,
       children: [],
     })
@@ -94,7 +116,7 @@ function TreeNodeRow({ node, depth, expanded, onToggle, onSelect, selectedId }: 
           {node.documentNumber && <span className="text-xs font-mono text-muted-foreground mr-2">{node.documentNumber}</span>}
           <span className={`text-sm font-medium truncate ${isSelected ? 'text-foreground' : ''}`}>{node.title}</span>
         </span>
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex">{node.docType}</Badge>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex">{DOC_TYPE_LABELS[node.docType] || node.docType || '—'}</Badge>
         <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 shrink-0 ${colors.text}`}>{LEVEL_LABELS[node.level]?.fr || `N${node.level}`}</Badge>
         <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${getStatusColor(node.status)}`}>{node.status}</Badge>
       </div>
@@ -190,12 +212,12 @@ export default function DocumentHierarchyView() {
     <div className="space-y-4 p-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Hierarchie Documentaire</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Hiérarchie Documentaire</h2>
           <p className="text-sm text-muted-foreground">Arborescence multi-niveaux (ISO 13485 §4.2.1) - {items.length} documents, {orphanCount} sans parent</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={expandAll}><Expand className="w-4 h-4 mr-1" /> Tout developper</Button>
-          <Button variant="outline" size="sm" onClick={collapseAll}><Shrink className="w-4 h-4 mr-1" /> Tout reduire</Button>
+          <Button variant="outline" size="sm" onClick={expandAll}><Expand className="w-4 h-4 mr-1" /> Tout développer</Button>
+          <Button variant="outline" size="sm" onClick={collapseAll}><Shrink className="w-4 h-4 mr-1" /> Tout réduire</Button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -207,9 +229,9 @@ export default function DocumentHierarchyView() {
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="Niveau" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">Tous les niveaux</SelectItem>
-            <SelectItem value="1">N1 - Strategique</SelectItem>
+            <SelectItem value="1">N1 - Stratégique</SelectItem>
             <SelectItem value="2">N2 - Transversal</SelectItem>
-            <SelectItem value="3">N3 - Metier / Technique</SelectItem>
+            <SelectItem value="3">N3 - Métier / Technique</SelectItem>
             <SelectItem value="4">N4 - Enregistrement</SelectItem>
           </SelectContent>
         </Select>
@@ -234,14 +256,14 @@ export default function DocumentHierarchyView() {
             <DocumentDetailPanel node={selectedNode} onClose={() => setSelectedId(null)} />
             <div className="flex gap-2">
               <Button variant="outline" size="sm" className="flex-1" onClick={() => setLinkDialogOpen(true)}><Link2 className="w-4 h-4 mr-1" /> Lier un enfant</Button>
-              {selectedNode.parentDocumentId && <Button variant="outline" size="sm" className="flex-1" onClick={() => setUnlinkTarget(selectedNode)}><Unlink className="w-4 h-4 mr-1" /> Detacher du parent</Button>}
+              {selectedNode.parentDocumentId && <Button variant="outline" size="sm" className="flex-1" onClick={() => setUnlinkTarget(selectedNode)}><Unlink className="w-4 h-4 mr-1" /> Détacher du parent</Button>}
             </div>
-          </>) : (<Card className="p-6 text-center text-muted-foreground text-sm">Selectionnez un document dans l'arborescence pour voir ses details.</Card>)}
-          <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Legende des niveaux</CardTitle></CardHeader><CardContent className="space-y-2">{Object.entries(LEVEL_LABELS).map(([level, labels]) => { const c = LEVEL_COLORS[Number(level)]!; return (<div key={level} className="flex items-center gap-2 text-sm"><span className={`w-3 h-3 rounded-full ${c.dot}`} /><span className={c.text}>{labels.fr}</span></div>) })}</CardContent></Card>
+          </>) : (<Card className="p-6 text-center text-muted-foreground text-sm">Sélectionnez un document dans l'arborescence pour voir ses détails.</Card>)}
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Légende des niveaux</CardTitle></CardHeader><CardContent className="space-y-2">{Object.entries(LEVEL_LABELS).map(([level, labels]) => { const c = LEVEL_COLORS[Number(level)]!; return (<div key={level} className="flex items-center gap-2 text-sm"><span className={`w-3 h-3 rounded-full ${c.dot}`} /><span className={c.text}>{labels.fr}</span></div>) })}</CardContent></Card>
         </div>
       </div>
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Lier un document enfant</DialogTitle><DialogDescription>Selectionnez un document a rattacher sous "{selectedNode?.title}".</DialogDescription></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Lier un document enfant</DialogTitle><DialogDescription>Sélectionnez un document à rattacher sous "{selectedNode?.title}".</DialogDescription></DialogHeader>
         <div className="space-y-3"><Select value={linkChildId} onValueChange={setLinkChildId}><SelectTrigger><SelectValue placeholder="Choisir un document..." /></SelectTrigger><SelectContent>{(items as any[]).filter((d: any) => d.id !== selectedId).sort((a: any, b: any) => a.title.localeCompare(b.title)).map((d: any) => (<SelectItem key={d.id} value={d.id}>{(d.document_number || '') + ' - ' + d.title}</SelectItem>))}</SelectContent></Select></div>
         <DialogFooter><Button variant="outline" onClick={() => setLinkDialogOpen(false)}>Annuler</Button><Button onClick={handleLink} disabled={!linkChildId}>Lier</Button></DialogFooter></DialogContent>
       </Dialog>

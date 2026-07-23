@@ -85,8 +85,86 @@ export async function create<T = any>(request: Request, entity: CrudEntity, body
   if (!sanitizedBody.id) sanitizedBody.id = randomUUID()
   sanitizedBody.updated_at = new Date().toISOString()
 
+  // --- Auto-génération des numéros métier (NOT NULL dans le schéma) ---
+  // Si le client n'a pas fourni le numéro, on en génère un unique par org
+  // au format PREFIX-YYYY-NNNN (ex: CAPA-2026-0001, DOC-2026-0001).
+  await autoGenerateBusinessNumber(client, entity, organizationId, sanitizedBody)
+
   const { data, error: qError } = await client.from(entity).insert(sanitizedBody).select().single()
   return { data: data as T, error: qError?.message }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-génération des numéros métier — corrige BUG-05/06/07.
+// Map entity → (column_name, prefix). Si la colonne est absente du body,
+// on calcule un numéro séquentiel pour l'organisation sur l'année courante.
+// ---------------------------------------------------------------------------
+const BUSINESS_NUMBER_CONFIG: Record<CrudEntity, { column: string; prefix: string }> = {
+  documents:               { column: 'document_number', prefix: 'DOC'  },
+  capas:                   { column: 'capa_number',     prefix: 'CAPA' },
+  non_conformances:        { column: 'ncr_number',      prefix: 'NCR'  },
+  deviations:              { column: 'dev_number',      prefix: 'DEV'  },
+  change_controls:         { column: 'cc_number',       prefix: 'CC'   },
+  audits:                  { column: 'audit_number',    prefix: 'AUD'  },
+  training:                { column: '', prefix: '' },  // training table n'a pas de training_number
+  risks:                   { column: 'risk_number',     prefix: 'RISK' },
+  suppliers:               { column: 'supplier_code',   prefix: 'SUP'  },
+  batch_records:           { column: 'lot_number',     prefix: 'BAT'  },
+  // Entités sans numéro métier (mappées à une sentinelle null)
+  electronic_signatures:   { column: '', prefix: '' },
+  document_prerequisites:  { column: '', prefix: '' },
+  form_templates:          { column: '', prefix: '' },
+  form_instances:          { column: '', prefix: '' },
+  departments:             { column: '', prefix: '' },
+  record_type_definitions: { column: '', prefix: '' },
+  record_links:            { column: '', prefix: '' },
+  document_triggers:       { column: '', prefix: '' },
+  document_relationships:  { column: '', prefix: '' },
+  document_code_sequences: { column: '', prefix: '' },
+  scheduled_reports:       { column: '', prefix: '' },
+  notifications:           { column: '', prefix: '' },
+}
+
+async function autoGenerateBusinessNumber(
+  client: any,
+  entity: CrudEntity,
+  organizationId: string,
+  body: Record<string, any>,
+): Promise<void> {
+  const config = BUSINESS_NUMBER_CONFIG[entity]
+  if (!config || !config.column || !config.prefix) return
+
+  // Si le client a fourni la valeur, on la garde (sanitisée plus tôt)
+  if (body[config.column] && typeof body[config.column] === 'string' && body[config.column].trim()) {
+    return
+  }
+
+  const year = new Date().getFullYear()
+  const prefix = `${config.prefix}-${year}-`
+
+  try {
+    // Compter les enregistrements existants pour cette org sur cette année
+    // (approche simple — pour la robustesse, utiliser une séquence dédiée).
+    const { data: existing, error } = await client
+      .from(entity)
+      .select(config.column)
+      .eq('organization_id', organizationId)
+      .like(config.column, `${prefix}%`)
+      .order(config.column, { ascending: false })
+      .limit(1)
+
+    let next = 1
+    if (!error && existing && existing.length > 0) {
+      const lastNum = existing[0][config.column] as string
+      const match = lastNum.match(/-(\d+)$/)
+      if (match) next = parseInt(match[1], 10) + 1
+    }
+
+    body[config.column] = `${prefix}${String(next).padStart(4, '0')}`
+  } catch (e) {
+    // En cas d'erreur, générer un numéro basé sur le timestamp (fallback)
+    body[config.column] = `${prefix}${Date.now().toString().slice(-6)}`
+  }
 }
 
 export async function update<T = any>(request: Request, entity: CrudEntity, id: string, body: Record<string, any>) {
