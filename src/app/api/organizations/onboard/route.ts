@@ -10,6 +10,7 @@ import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { getServerSession, requireAuth, hashPassword } from '@/lib/auth-server'
 import type { IndustryType, ModuleKey } from '@/types/qms'
 import { adminClient } from '@/lib/supabase/server-with-context'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -87,12 +88,14 @@ export async function POST(request: NextRequest) {
         const { data: profile, error: profError } = await adminClient
           .from('profiles')
           .insert({
+            id: randomUUID(),
             email: member.email.toLowerCase().trim(),
             full_name: member.full_name,
             password_hash: passwordHash,
             role: role,
             organization_id: session.profile.organizationId,
             active: false, // Must be activated
+            updated_at: new Date().toISOString(),
           })
           .select('id, email, full_name, role')
           .single()
@@ -102,10 +105,12 @@ export async function POST(request: NextRequest) {
           await adminClient
             .from('organization_members')
             .insert({
+              id: randomUUID(),
               organization_id: session.profile.organizationId,
               user_id: profile.id,
               role: role,
               status: 'pending',
+              updated_at: new Date().toISOString(),
             })
 
           invitedMembers.push(profile)

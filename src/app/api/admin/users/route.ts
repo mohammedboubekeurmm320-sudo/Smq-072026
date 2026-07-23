@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedClient, adminClient } from '@/lib/supabase/server-with-context'
 import { requireAuth, requirePermission, hashPassword } from '@/lib/auth-server'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
     const { data: profile, error: profError } = await adminClient
       .from('profiles')
       .insert({
+        id: randomUUID(),
         email: email.toLowerCase().trim(),
         full_name: full_name.trim(),
         password_hash: passwordHash,
@@ -116,6 +118,7 @@ export async function POST(request: NextRequest) {
         job_title: job_title || null,
         organization_id: session.profile.organizationId,
         active: true,
+        updated_at: new Date().toISOString(),
       })
       .select('id, email, full_name, role, department, job_title, active')
       .single()
@@ -131,10 +134,12 @@ export async function POST(request: NextRequest) {
     const { error: memberError } = await adminClient
       .from('organization_members')
       .insert({
+        id: randomUUID(),
         organization_id: session.profile.organizationId,
         user_id: profile.id,
         role: finalRole,
         status: 'active',
+        updated_at: new Date().toISOString(),
       })
 
     if (memberError) {

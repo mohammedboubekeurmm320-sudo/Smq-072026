@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { requireAuth, requirePermission } from '@/lib/auth-server'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -111,6 +112,8 @@ export async function POST(request: NextRequest) {
     const { data, error } = await client
       .from('record_type_definitions')
       .insert({
+        id: randomUUID(),
+        updated_at: new Date().toISOString(),
         name: `Custom: ${name}`,
         slug,
         description: helpText || null,

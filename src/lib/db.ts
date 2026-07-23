@@ -424,6 +424,9 @@ function createModelWrapper(tableName: string): any {
       const { where, data, select } = args
       const snakeData = toSnakeCase(data)
 
+      // Always set updated_at on updates (NOT NULL without DEFAULT)
+      snakeData.updated_at = new Date().toISOString()
+
       let selectStr: string | undefined
       if (select) {
         selectStr = Object.keys(select).map(k => camelToSnake(k)).join(',')

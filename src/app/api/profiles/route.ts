@@ -3,8 +3,9 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
+import { adminClient } from '@/lib/supabase/server-with-context'
 import { getServerSession, hashPassword } from '@/lib/auth-server'
+import { randomUUID } from 'crypto'
 
 // GET /api/profiles → liste des profils de l'org
 export async function GET() {
@@ -14,13 +15,7 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Non authentifié' }, { status: 401 })
     }
 
-    const req = { headers: new Headers() } as any
-    const { client } = await getAuthenticatedClient(req)
-    if (!client) {
-      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
-    }
-
-    const { data, error } = await client
+    const { data, error } = await adminClient
       .from('profiles')
       .select('id, email, full_name, role, department, job_title, phone, active, last_login_at, created_at, organization_id')
       .eq('organization_id', session.profile.organizationId)
@@ -54,15 +49,10 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await hashPassword(password)
 
-    const req = { headers: new Headers() } as any
-    const { client } = await getAuthenticatedClient(req)
-    if (!client) {
-      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
-    }
-
-    const { data, error } = await client
+    const { data, error } = await adminClient
       .from('profiles')
       .insert({
+        id: randomUUID(),
         email: email.toLowerCase().trim(),
         full_name: full_name,
         password_hash: passwordHash,
@@ -70,6 +60,8 @@ export async function POST(req: NextRequest) {
         department: department || null,
         job_title: job_title || null,
         organization_id: session.profile.organizationId,
+        active: true,
+        updated_at: new Date().toISOString(),
       })
       .select('id, email, full_name, role, department, job_title, active')
       .single()

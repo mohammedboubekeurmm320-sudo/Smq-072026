@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyPassword } from '@/lib/auth-server'
+import { randomUUID } from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -72,6 +73,8 @@ export async function POST(request: NextRequest) {
     const { data: signature, error: sigError } = await supabase
       .from('electronic_signatures')
       .insert({
+        id: randomUUID(),
+        updated_at: new Date().toISOString(),
         document_id: documentId || null,
         record_id: recordId || null,
         record_type: recordType || null,

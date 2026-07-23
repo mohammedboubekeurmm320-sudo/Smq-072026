@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { requireAuth } from '@/lib/auth-server'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -118,10 +119,12 @@ export async function POST(request: NextRequest) {
     const { data, error } = await client
       .from('document_relationships')
       .insert({
+        id: randomUUID(),
         parent_document_id: parentDocumentId,
         child_document_id: childDocumentId,
         relationship_type: relationshipType,
         organization_id: orgId,
+        updated_at: new Date().toISOString(),
       })
       .select()
       .single()

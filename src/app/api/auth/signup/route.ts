@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
       user_id: profile.id,
       role: 'owner',
       status: 'active',
+      updated_at: new Date().toISOString(),
     })
 
     // Créer la session en base pour révocation
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
       .insert({
         id: randomUUID(),
         profile_id: profile.id,
+        updated_at: new Date().toISOString(),
         user_agent: req.headers.get('user-agent') || null,
         ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
@@ -188,6 +190,7 @@ async function seedSystemRecordTypes(supabase: any, orgId: string, profileId: st
     compliance_refs_json: JSON.stringify(compliance[slug] || []),
     is_system: true, is_active: true, requires_esig: eSig[slug], min_approver_count: 1,
     version: 1, organization_id: orgId, created_by: profileId,
+    updated_at: new Date().toISOString(),
   }))
 
   await supabase.from('record_type_definitions').insert(rows)

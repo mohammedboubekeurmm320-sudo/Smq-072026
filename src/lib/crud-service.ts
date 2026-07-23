@@ -9,6 +9,7 @@ import { checkDocumentPrerequisite, PREREQUISITE_GATED_ENTITIES } from '@/lib/do
 import { checkDocumentStatusTransition } from '@/lib/document-workflow-guard'
 import { sanitizeObject } from '@/lib/sanitize'
 import type { Request } from 'next/server'
+import { randomUUID } from 'crypto'
 
 export type CrudEntity =
   | 'documents' | 'electronic_signatures' | 'document_prerequisites'
@@ -80,6 +81,10 @@ export async function create<T = any>(request: Request, entity: CrudEntity, body
   const tablesWithCreator = ['documents', 'form_templates', 'form_instances', 'capas', 'non_conformances', 'deviations', 'change_controls', 'audits', 'training', 'risks', 'suppliers', 'batch_records', 'scheduled_reports', 'notifications']
   if (tablesWithCreator.includes(entity) && profileId) sanitizedBody.created_by_id = profileId
 
+  // Auto-generate id and updated_at for NOT NULL columns
+  if (!sanitizedBody.id) sanitizedBody.id = randomUUID()
+  sanitizedBody.updated_at = new Date().toISOString()
+
   const { data, error: qError } = await client.from(entity).insert(sanitizedBody).select().single()
   return { data: data as T, error: qError?.message }
 }
@@ -110,6 +115,9 @@ export async function update<T = any>(request: Request, entity: CrudEntity, id: 
       }
     }
   }
+
+  // Always set updated_at on updates (NOT NULL without DEFAULT)
+  body.updated_at = new Date().toISOString()
 
   let query = client.from(entity).update(body).eq('id', id)
   if (ORG_SCOPED_ENTITIES.has(entity)) query = query.eq('organization_id', organizationId)

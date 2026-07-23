@@ -13,10 +13,10 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Non authentifié' }, { status: 401 })
     }
 
-    const { client } = await getAuthenticatedClient({ headers: new Headers() } as any)
-    if (!client) {
-      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
-    }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const { createClient } = await import('@supabase/supabase-js')
+    const client = createClient(supabaseUrl, supabaseKey)
 
     const orgId = session.profile.organizationId
 
@@ -68,10 +68,10 @@ export async function PUT(req: NextRequest) {
     const { name, settings } = body
     const orgId = session.profile.organizationId
 
-    const { client } = await getAuthenticatedClient({ headers: new Headers() } as any)
-    if (!client) {
-      return NextResponse.json({ success: false, error: 'Client error' }, { status: 500 })
-    }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const { createClient } = await import('@supabase/supabase-js')
+    const client = createClient(supabaseUrl, supabaseKey)
 
     const updateData: Record<string, any> = {}
     if (name !== undefined) updateData.name = name

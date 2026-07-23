@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { signSession } from '@/lib/session'
+import { randomUUID } from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -63,9 +64,21 @@ export async function POST(request: NextRequest) {
       .single()
 
     // Créer la session en base pour permettre la révocation
+    const sessionId = randomUUID()
+    const sessionToken = await signSession({
+      sub: profile.id,
+      email: profile.email,
+      name: profile.full_name,
+      organizationId: membership?.organization_id || profile.organization_id,
+      role: membership?.role || 'member',
+      sid: sessionId,
+    })
     const { data: sessionRow } = await supabase
       .from('sessions')
       .insert({
+        id: sessionId,
+        updated_at: new Date().toISOString(),
+        token: sessionToken,
         profile_id: profile.id,
         user_agent: request.headers.get('user-agent') || null,
         ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
@@ -73,16 +86,6 @@ export async function POST(request: NextRequest) {
       })
       .select('id')
       .single()
-
-    // Signer le JWT avec sid pour révocation
-    const sessionToken = await signSession({
-      sub: profile.id,
-      email: profile.email,
-      name: profile.full_name,
-      organizationId: membership?.organization_id || profile.organization_id,
-      role: membership?.role || 'member',
-      sid: sessionRow?.id,
-    })
 
     // Mettre à jour last_login
     await supabase

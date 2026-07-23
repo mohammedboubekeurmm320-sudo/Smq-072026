@@ -10,6 +10,7 @@ import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { requireAuth } from '@/lib/auth-server'
 import { parseCsv, validateImportData, getFieldMap, generateImportTemplate } from '@/lib/import-service'
 import type { CrudEntity } from '@/lib/crud-service'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -110,10 +111,13 @@ export async function POST(request: NextRequest) {
 
       // Add organization_id and created_by to each record
       const orgId = session.profile.organizationId
+      const now = new Date().toISOString()
       const records = batch.map(row => ({
         ...row,
+        id: randomUUID(),
         organization_id: orgId,
         created_by: profileId,
+        updated_at: now,
       }))
 
       const { error } = await client

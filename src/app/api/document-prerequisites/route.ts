@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedClient } from '@/lib/supabase/server-with-context'
 import { requireAuth } from '@/lib/auth-server'
+import { randomUUID } from 'crypto'
 
 function ok(data: any, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
@@ -85,6 +86,8 @@ export async function POST(request: NextRequest) {
     const { data, error } = await client
       .from('document_prerequisites')
       .insert({
+        id: randomUUID(),
+        updated_at: new Date().toISOString(),
         record_type: recordType,
         required_doc_type: requiredDocType,
         required_doc_ref: requiredDocRef || null,
