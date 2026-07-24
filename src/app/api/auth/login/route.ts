@@ -5,10 +5,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { signSession } from '@/lib/session'
-import { randomUUID } from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+/**
+ * Génère un UUID de manière fiable (Web Crypto API global + fallback).
+ */
+function uuid(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch { /* fallback ci-dessous */ }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,11 +79,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer l'org et le rôle
-    // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+    // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
+    // (vérifié via information_schema.columns). Les fichiers Prisma et
+    // migration 000 mentionnent `profile_id` mais ils sont OBSOLÈTES.
     const { data: membership, error: membershipError } = await supabase
       .from('organization_members')
       .select('organization_id, role')
-      .eq('profile_id', profile.id)
+      .eq('user_id', profile.id)
       .eq('status', 'active')
       .limit(1)
       .maybeSingle()
@@ -81,7 +98,7 @@ export async function POST(request: NextRequest) {
     // IMPORTANT: la table `sessions` ne contient QUE les colonnes
     // {id, token, profile_id, expires_at, created_at} — ne pas insérer
     // updated_at / user_agent / ip (ces colonnes n'existent pas en base).
-    const sessionId = randomUUID()
+    const sessionId = uuid()
     const sessionToken = await signSession({
       sub: profile.id,
       email: profile.email,
