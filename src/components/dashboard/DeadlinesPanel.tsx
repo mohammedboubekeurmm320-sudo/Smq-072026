@@ -40,6 +40,8 @@ const ENTITY_LABELS: Record<string, string> = {
 
 export function DeadlinesPanel({ deadlines, loading, showViewAll = true }: DeadlinesPanelProps) {
   const router = useRouter()
+  // Défensif: s'assurer que deadlines est toujours un array
+  const safeDeadlines: Deadline[] = Array.isArray(deadlines) ? deadlines : []
 
   if (loading) {
     return (
@@ -79,13 +81,13 @@ export function DeadlinesPanel({ deadlines, loading, showViewAll = true }: Deadl
         </div>
       </CardHeader>
       <CardContent>
-        {deadlines.length === 0 ? (
+        {safeDeadlines.length === 0 ? (
           <div className="text-center py-6 text-sm text-muted-foreground">
             Aucune échéance à venir
           </div>
         ) : (
           <div className="space-y-3">
-            {deadlines.slice(0, 8).map((d) => {
+            {safeDeadlines.slice(0, 8).map((d) => {
               const isOverdue = d.daysRemaining < 0
               const isUrgent = d.daysRemaining >= 0 && d.daysRemaining <= 3
               const dateStr = new Date(d.dueDate).toLocaleDateString('fr-FR', {

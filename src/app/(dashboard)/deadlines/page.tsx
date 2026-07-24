@@ -26,7 +26,9 @@ export default function DeadlinesPage() {
   const [entityFilter, setEntityFilter] = useState('ALL')
 
   const { data: deadlinesData, isLoading } = useDeadlines(days)
-  const deadlines = deadlinesData?.data || deadlinesData || []
+  // Défensif: s'assurer que deadlines est toujours un array
+  const rawDeadlines = deadlinesData?.data || deadlinesData
+  const deadlines: any[] = Array.isArray(rawDeadlines) ? rawDeadlines : []
 
   const filtered = deadlines
     .filter((d: any) => entityFilter === 'ALL' || d.entityType === entityFilter)

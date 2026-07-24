@@ -18,7 +18,10 @@ export default function DashboardPage() {
   const kpis = kpiData?.kpis || kpiData?.data?.kpis || {}
   const complianceScore = kpiData?.complianceScore || kpiData?.data?.complianceScore || 0
   const charts = kpiData?.charts || kpiData?.data?.charts || {}
-  const deadlines = deadlinesData?.data || deadlinesData || []
+  // Défensif — si l'API deadlines échoue, on a un objet erreur au lieu d'un array.
+  // On force un array pour éviter le crash "e.filter is not a function".
+  const rawDeadlines = deadlinesData?.data || deadlinesData
+  const deadlines: any[] = Array.isArray(rawDeadlines) ? rawDeadlines : []
 
   const firstName = user?.full_name?.split(' ')[0] || ''
 
