@@ -7,10 +7,29 @@ import { createClient } from '@supabase/supabase-js'
 import { hashPassword } from '@/lib/auth-server'
 import { signSession } from '@/lib/session'
 import { INDUSTRY_CONFIG, STANDARDS_BY_INDUSTRY, type IndustryType } from '@/types/qms'
-import { randomUUID } from 'crypto'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+/**
+ * Génère un UUID de manière fiable.
+ * Utilise crypto.randomUUID() (Web Crypto API global) qui fonctionne
+ * dans tous les runtimes (Node 18+, Edge, navigateur).
+ * Fallback manuel si l'API n'est pas disponible.
+ */
+function uuid(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch { /* fallback ci-dessous */ }
+  // Fallback RFC 4122 v4 simplifié
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,13 +45,11 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Validation des entrées (BUG-12) ---
-    // Email: format RFC 5322 simplifié
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(String(email))) {
       return NextResponse.json({ success: false, error: 'Format d\'email invalide' }, { status: 400 })
     }
 
-    // Mot de passe: minimum 12 caractères, complexité (majuscule, minuscule, chiffre, spécial)
     const pwd = String(password)
     if (pwd.length < 12) {
       return NextResponse.json({ success: false, error: 'Le mot de passe doit contenir au moins 12 caractères' }, { status: 400 })
@@ -41,20 +58,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Le mot de passe doit contenir au moins une majuscule, une minuscule, un chiffre et un caractère spécial' }, { status: 400 })
     }
 
-    // Longueur max des champs texte (protection DoS + cohérence DB)
     const MAX_NAME_LEN = 255
-    const MAX_ORG_LEN = 255
     if (String(fullName).length > MAX_NAME_LEN) {
       return NextResponse.json({ success: false, error: `Le nom complet ne peut pas dépasser ${MAX_NAME_LEN} caractères` }, { status: 400 })
     }
-    if (String(orgName).length > MAX_ORG_LEN) {
-      return NextResponse.json({ success: false, error: `Le nom de l\'organisation ne peut pas dépasser ${MAX_ORG_LEN} caractères` }, { status: 400 })
+    if (String(orgName).length > MAX_NAME_LEN) {
+      return NextResponse.json({ success: false, error: `Le nom de l'organisation ne peut pas dépasser ${MAX_NAME_LEN} caractères` }, { status: 400 })
     }
-    if (String(email).length > 320) { // RFC 5321
+    if (String(email).length > 320) {
       return NextResponse.json({ success: false, error: 'Email trop long' }, { status: 400 })
     }
 
-    // Rejet des contenus HTML/script (protection XSS stocké)
     const htmlTagRegex = /<[a-zA-Z][^>]*>|<\/[a-zA-Z][^>]*>/
     if (htmlTagRegex.test(String(fullName)) || htmlTagRegex.test(String(orgName))) {
       return NextResponse.json({ success: false, error: 'Les balises HTML ne sont pas autorisées dans le nom ou le nom d\'organisation' }, { status: 400 })
@@ -67,7 +81,7 @@ export async function POST(req: NextRequest) {
       .from('profiles')
       .select('id')
       .eq('email', email.toLowerCase().trim())
-      .single()
+      .maybeSingle()
 
     if (existing) {
       return NextResponse.json({ success: false, error: 'Cet email est déjà utilisé' }, { status: 409 })
@@ -86,20 +100,31 @@ export async function POST(req: NextRequest) {
       notifications: { capa_overdue: true, ncr_overdue: true, document_expiry: true, training_overdue: true, audit_due: true },
     }
 
-    const orgId = randomUUID()
+    // IMPORTANT: la DB réelle n'a PAS de colonne updated_at sur organizations
+    // (vérifié via information_schema). La migration 000 mentionne updated_at
+    // mais la DB a été modifiée. On ne passe QUE les colonnes qui existent.
+    // La colonne id a un DEFAULT (gen_random_uuid())::text — on la passe
+    // explicitement pour être sûr d'avoir une valeur valide.
+    const orgId = uuid()
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .insert({ id: orgId, name: orgName, slug, settings: JSON.stringify(settings), updated_at: new Date().toISOString() })
+      .insert({
+        id: orgId,
+        name: orgName,
+        slug,
+        settings: JSON.stringify(settings),
+      })
       .select()
       .single()
 
     if (orgError) {
+      console.error('[signup] organizations insert failed:', orgError.message, { orgId })
       return NextResponse.json({ success: false, error: orgError.message }, { status: 500 })
     }
 
     // Créer le profil admin
     const passwordHash = await hashPassword(password)
-    const profileId = randomUUID()
+    const profileId = uuid()
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .insert({
@@ -110,23 +135,25 @@ export async function POST(req: NextRequest) {
         password_hash: passwordHash,
         organization_id: org.id,
         active: true,
-        updated_at: new Date().toISOString(),
       })
       .select('id, email, full_name, role, organization_id')
       .single()
 
     if (profileError) {
+      console.error('[signup] profiles insert failed:', profileError.message)
       // Rollback: supprimer l'org
       await supabase.from('organizations').delete().eq('id', org.id)
       return NextResponse.json({ success: false, error: profileError.message }, { status: 500 })
     }
 
     // Ajouter le membership
-    // NOTE: la colonne s'appelle `profile_id` (et non `user_id`) dans le schéma Prisma/SQL.
+    // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
+    // (vérifié via information_schema.columns). Les fichiers Prisma et
+    // migration 000 mentionnent `profile_id` mais ils sont OBSOLÈTES.
     const { error: memberInsertError } = await supabase.from('organization_members').insert({
-      id: randomUUID(),
+      id: uuid(),
       organization_id: org.id,
-      profile_id: profile.id,
+      user_id: profile.id,
       role: 'owner',
       status: 'active',
     })
@@ -141,7 +168,7 @@ export async function POST(req: NextRequest) {
 
     // Créer la session en base pour révocation.
     // IMPORTANT: la table `sessions` ne contient QUE {id, token, profile_id, expires_at, created_at}.
-    const sessionId = randomUUID()
+    const sessionId = uuid()
     const sessionToken = await signSession({
       sub: profile.id,
       email: profile.email,
@@ -163,9 +190,7 @@ export async function POST(req: NextRequest) {
 
     if (sessionInsertError || !sessionRow) {
       console.error('[signup] session insert failed:', sessionInsertError?.message)
-      // Non-bloquant: l'utilisateur peut tout de même se connecter (le middleware
-      // vérifiera sid contre la table — si absent, sid sera undefined et le check
-      // sera ignoré). On logge l'erreur pour investigation.
+      // Non-bloquant: l'utilisateur peut tout de même se connecter.
     }
 
     // Seed system record types
@@ -199,6 +224,7 @@ export async function POST(req: NextRequest) {
 
     return response
   } catch (e: any) {
+    console.error('[signup] unexpected error:', e)
     return NextResponse.json({ success: false, error: e.message || 'Erreur serveur' }, { status: 500 })
   }
 }
@@ -237,7 +263,7 @@ async function seedSystemRecordTypes(supabase: any, orgId: string, profileId: st
   const eSig: Record<string, boolean> = { capa: true, ncr: true, deviation: true, change_control: true, audit: true, risk: true, training: true, supplier: true, batch_record: true, oos_oot: true }
 
   const rows = slugs.map(slug => ({
-    id: randomUUID(),
+    id: uuid(),
     slug, name: names[slug], name_en: slug, icon: 'FileText',
     description: `${names[slug]} (système)`,
     status_flow_json: JSON.stringify(flows[slug]),
@@ -245,7 +271,6 @@ async function seedSystemRecordTypes(supabase: any, orgId: string, profileId: st
     compliance_refs_json: JSON.stringify(compliance[slug] || []),
     is_system: true, is_active: true, requires_esig: eSig[slug], min_approver_count: 1,
     version: 1, organization_id: orgId, created_by: profileId,
-    updated_at: new Date().toISOString(),
   }))
 
   await supabase.from('record_type_definitions').insert(rows)
