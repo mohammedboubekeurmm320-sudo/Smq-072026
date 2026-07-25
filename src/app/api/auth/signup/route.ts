@@ -100,11 +100,12 @@ export async function POST(req: NextRequest) {
       notifications: { capa_overdue: true, ncr_overdue: true, document_expiry: true, training_overdue: true, audit_due: true },
     }
 
-    // IMPORTANT: la DB réelle n'a PAS de colonne updated_at sur organizations
-    // (vérifié via information_schema). La migration 000 mentionne updated_at
-    // mais la DB a été modifiée. On ne passe QUE les colonnes qui existent.
-    // La colonne id a un DEFAULT (gen_random_uuid())::text — on la passe
-    // explicitement pour être sûr d'avoir une valeur valide.
+    // IMPORTANT: la DB réelle A une colonne `updated_at` NOT NULL sur organizations
+    // (vérifié via information_schema.columns ET confirmé par l'erreur runtime
+    // "null value in column updated_at violates not-null constraint").
+    // Migration 000_prisma_base_tables.sql ligne 11: "updated_at" TIMESTAMP(3) NOT NULL
+    // (sans DEFAULT) — l'INSERT doit donc fournir une valeur explicite.
+    // Le commit 7e72695 l'avait à tort retiré en pensant que la colonne n'existait pas.
     const orgId = uuid()
     const { data: org, error: orgError } = await supabase
       .from('organizations')
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
         name: orgName,
         slug,
         settings: JSON.stringify(settings),
+        updated_at: new Date().toISOString(),
       })
       .select()
       .single()
@@ -123,6 +125,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Créer le profil admin
+    // IMPORTANT: la DB réelle A une colonne `updated_at` NOT NULL sur profiles
+    // (vérifié via information_schema.columns ET par l'erreur runtime).
+    // Les autres endpoints (api/admin/users, api/profiles, api/organizations/onboard)
+    // envoient tous `updated_at` — signup doit faire de même pour rester cohérent.
     const passwordHash = await hashPassword(password)
     const profileId = uuid()
     const { data: profile, error: profileError } = await supabase
@@ -135,6 +141,7 @@ export async function POST(req: NextRequest) {
         password_hash: passwordHash,
         organization_id: org.id,
         active: true,
+        updated_at: new Date().toISOString(),
       })
       .select('id, email, full_name, role, organization_id')
       .single()
@@ -150,12 +157,15 @@ export async function POST(req: NextRequest) {
     // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
     // (vérifié via information_schema.columns). Les fichiers Prisma et
     // migration 000 mentionnent `profile_id` mais ils sont OBSOLÈTES.
+    // On envoie aussi `updated_at` pour cohérence avec les autres endpoints
+    // (api/admin/users, api/organizations/onboard) qui le font également.
     const { error: memberInsertError } = await supabase.from('organization_members').insert({
       id: uuid(),
       organization_id: org.id,
       user_id: profile.id,
       role: 'owner',
       status: 'active',
+      updated_at: new Date().toISOString(),
     })
 
     if (memberInsertError) {
