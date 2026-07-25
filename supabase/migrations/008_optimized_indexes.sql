@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_electronic_sigs_signed_by ON public.electronic_si
 
 -- Organization Members
 CREATE INDEX IF NOT EXISTS idx_org_members_org_status ON public.organization_members(organization_id, status);
-CREATE INDEX IF NOT EXISTS idx_org_members_user ON public.organization_members(profile_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_user ON public.organization_members(user_id);
 
 -- Profiles
 CREATE INDEX IF NOT EXISTS idx_profiles_org ON public.profiles(organization_id);

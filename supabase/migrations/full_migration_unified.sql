@@ -1475,7 +1475,7 @@ SELECT
   o.settings AS org_settings
 FROM profiles p
 LEFT JOIN organizations o ON o.id = p.organization_id
-LEFT JOIN organization_members om ON om.organization_id = o.id AND om.profile_id = p.id
+LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = p.id
 WHERE p.active = true;
 
 -- ============================================================================
