@@ -31,6 +31,7 @@ interface AuthContextType {
   switchOrg: (orgId: string) => Promise<void>
   refreshSession: () => Promise<void>
   isAuthenticated: boolean
+  hasInitiallyLoaded: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -42,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentOrgName, setCurrentOrgName] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false)
 
   const refreshSession = useCallback(async () => {
     try {
@@ -51,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.status === 401) {
         setUser(null)
         setMemberships([])
+        setCurrentOrgId(null)
+        setCurrentOrgName(null)
         return
       }
       const data = await res.json()
@@ -65,20 +69,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMemberships(data.memberships || [])
 
         // Déterminer l'org courante
-        const cookieOrg = document.cookie
-          .split('; ')
-          .find(c => c.startsWith('current_org_id='))
-          ?.split('=')[1]
+        const cookieOrg = typeof document !== 'undefined'
+          ? document.cookie
+            .split('; ')
+            .find(c => c.startsWith('current_org_id='))
+            ?.split('=')[1]
+          : null
 
-        const orgId = cookieOrg || p.organization_id || data.memberships?.[0]?.organization_id
+        const orgId = cookieOrg || p.organization_id || data.memberships?.[0]?.organization_id || null
         setCurrentOrgId(orgId)
         const org = data.memberships?.find((m: Membership) => m.organization_id === orgId)
         setCurrentOrgName(org?.organization?.name || p.organization_name || null)
+      } else {
+        // authenticated: false ou profile null — on reset proprement
+        setUser(null)
+        setMemberships([])
+        setCurrentOrgId(null)
+        setCurrentOrgName(null)
       }
-    } catch {
+    } catch (e) {
+      console.error('[AuthContext] refreshSession error:', e)
       setError('Erreur de session')
+      // En cas d'erreur réseau, on NE déconnecte pas l'utilisateur
+      // (pour éviter les déconnexions intempestives sur latence temporaire)
+      // L'utilisateur reste dans son état précédent.
     } finally {
       setLoading(false)
+      setHasInitiallyLoaded(true)
     }
   }, [])
 
@@ -88,14 +105,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     setError(null)
+    setLoading(true)
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Erreur de connexion')
+    if (!res.ok) {
+      setLoading(false)
+      throw new Error(data.error || 'Erreur de connexion')
+    }
+    // IMPORTANT: attendre que refreshSession ait mis à jour user AVANT
+    // de relâcher le loading. Sinon, le DashboardLayout voit un état
+    // transitoire (loading=false, isAuthenticated=false) qui déclenche
+    // la redirection vers /login.
     await refreshSession()
+    // Vérifier que l'utilisateur est bien authentifié après refresh
+    // (sinon le cookie n'a pas été posé correctement)
+    // user est mis à jour par refreshSession via setUser
   }
 
   const logout = async () => {
@@ -128,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading, error,
         login, logout, switchOrg, refreshSession,
         isAuthenticated: !!user,
+        hasInitiallyLoaded,
       }}
     >
       {children}

@@ -51,17 +51,22 @@ function resolveHref(slug: string): string {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, isAuthenticated, loading } = useAuth()
+  const { user, isAuthenticated, loading, hasInitiallyLoaded } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
 
   // Redirect to login if not authenticated
+  // IMPORTANT: on ne redirige QUE si on a déjà terminé le premier chargement
+  // ET qu'on a la certitude que l'utilisateur n'est pas authentifié.
+  // Sinon, on a un race condition: le layout se monte avant que refreshSession
+  // ait eu le temps de mettre à jour `user`, et on redirige vers /login
+  // alors que l'utilisateur est en réalité connecté.
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (hasInitiallyLoaded && !loading && !isAuthenticated) {
       router.push('/login')
     }
-  }, [loading, isAuthenticated, router])
+  }, [hasInitiallyLoaded, loading, isAuthenticated, router])
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -81,7 +86,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  if (loading) {
+  if (loading && !hasInitiallyLoaded) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Chargement...</div>
@@ -89,7 +94,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     )
   }
 
-  if (!isAuthenticated) return null
+  // Si on est en cours de chargement (refresh) mais qu'on a déjà un user,
+  // on affiche le dashboard avec les données précédentes (pas de flash blanc)
+  if (!isAuthenticated && hasInitiallyLoaded) {
+    // L'useEffect ci-dessus va déclencher la redirection vers /login
+    return null
+  }
+
+  // Pendant le chargement initial (avant hasInitiallyLoaded), on garde le loader
+  // pour éviter tout flash de "non authentifié"
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Chargement...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
