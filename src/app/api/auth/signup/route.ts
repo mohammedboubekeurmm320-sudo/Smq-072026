@@ -157,23 +157,24 @@ export async function POST(req: NextRequest) {
     // NOTE: la colonne s'appelle `user_id` dans la base de données réelle
     // (vérifié via information_schema.columns). Les fichiers Prisma et
     // migration 000 mentionnent `profile_id` mais ils sont OBSOLÈTES.
-    // On envoie aussi `updated_at` pour cohérence avec les autres endpoints
-    // (api/admin/users, api/organizations/onboard) qui le font également.
+    // IMPORTANT: organization_members n'a PAS de colonne updated_at
+    // (vérifié via migration 000_prisma_base_tables.sql). Contrairement à
+    // organizations et profiles qui en ont une NOT NULL.
     const { error: memberInsertError } = await supabase.from('organization_members').insert({
       id: uuid(),
       organization_id: org.id,
       user_id: profile.id,
       role: 'owner',
       status: 'active',
-      updated_at: new Date().toISOString(),
     })
 
     if (memberInsertError) {
-      console.error('[signup] organization_members insert failed:', memberInsertError.message)
+      console.error('[signup] organization_members insert failed:', memberInsertError.message, memberInsertError.code)
       // Rollback: supprimer le profil et l'org
       await supabase.from('profiles').delete().eq('id', profile.id)
       await supabase.from('organizations').delete().eq('id', org.id)
-      return NextResponse.json({ success: false, error: 'Impossible de créer le membership.' }, { status: 500 })
+      // Retourner le VRAI message d'erreur Supabase pour faciliter le debug
+      return NextResponse.json({ success: false, error: `Membership: ${memberInsertError.message}` }, { status: 500 })
     }
 
     // Créer la session en base pour révocation.

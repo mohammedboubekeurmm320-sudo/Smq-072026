@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
 
         if (!profError && profile) {
           // Create organization membership
+          // NOTE: organization_members n'a PAS de colonne updated_at (migration 000)
           await adminClient
             .from('organization_members')
             .insert({
@@ -110,7 +111,6 @@ export async function POST(request: NextRequest) {
               user_id: profile.id,
               role: role,
               status: 'pending',
-              updated_at: new Date().toISOString(),
             })
 
           invitedMembers.push(profile)
