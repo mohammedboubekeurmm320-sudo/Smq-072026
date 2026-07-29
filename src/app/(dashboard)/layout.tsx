@@ -9,6 +9,7 @@ import { UserMenu } from '@/components/qms/UserMenu'
 import { GlobalSearch } from '@/components/shared/GlobalSearch'
 import { MobileBottomNav } from '@/components/shared/MobileBottomNav'
 import { ThemeToggle } from '@/components/shared/ThemeToggle'
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { SIDEBAR_NAV, type NavGroup } from '@/lib/qms-entity-map'
 import { cn } from '@/lib/utils'
 import { Menu, ShieldCheck, PanelLeftClose, PanelLeft } from 'lucide-react'
@@ -238,15 +239,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-2">
-            <OrgSwitcher />
-            <NotificationBell />
-            <UserMenu />
+            <ErrorBoundary>
+              <OrgSwitcher />
+              <NotificationBell />
+              <UserMenu />
+            </ErrorBoundary>
           </div>
         </header>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-6 pb-20 md:pb-6">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
 
         {/* Mobile bottom nav (visible on small screens only) */}

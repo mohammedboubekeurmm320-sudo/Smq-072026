@@ -44,15 +44,24 @@ export function NotificationBell() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const router = useRouter()
-  const unreadCount = notifications.filter(n => !n.read).length
+  // Défensif: s'assurer que notifications est TOUJOURS un array
+  // (évite le crash "e.filter is not a function" si l'API retourne un objet erreur)
+  const safeNotifications: Notification[] = Array.isArray(notifications) ? notifications : []
+  const unreadCount = safeNotifications.filter(n => !n.read).length
 
   const fetchNotifications = async () => {
     try {
       setLoading(true)
       const res = await apiGet<any>('/api/qms/notifications?limit=15&sort=createdAt&order=desc')
-      setNotifications(res?.data || res || [])
+      // res peut être: un array, { items: [] }, { data: [] }, ou un objet erreur
+      const list = Array.isArray(res) ? res
+        : Array.isArray(res?.items) ? res.items
+        : Array.isArray(res?.data) ? res.data
+        : []
+      setNotifications(list)
     } catch {
       // Notifications API may not exist yet, silent fail
+      setNotifications([])
     } finally {
       setLoading(false)
     }
@@ -106,12 +115,12 @@ export function NotificationBell() {
                 </div>
               ))}
             </div>
-          ) : notifications.length === 0 ? (
+          ) : safeNotifications.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
               Aucune notification
             </div>
           ) : (
-            notifications.map(n => {
+            safeNotifications.map(n => {
               const Icon = TYPE_ICONS[n.type] || Info
               const color = TYPE_COLORS[n.type] || 'text-gray-600 bg-gray-50'
 
@@ -138,7 +147,7 @@ export function NotificationBell() {
             })
           )}
         </ScrollArea>
-        {notifications.length > 0 && (
+        {safeNotifications.length > 0 && (
           <div className="border-t px-4 py-2">
             <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => { setOpen(false); router.push('/notifications') }}>
               Voir toutes les notifications
